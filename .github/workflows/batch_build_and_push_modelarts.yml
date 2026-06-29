@@ -45,7 +45,11 @@ jobs:
           echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
 
   build:
+    name: build ${{ matrix.modelarts_tag }}
     needs: prepare
+    permissions:
+      contents: read
+      packages: write
     strategy:
       max-parallel: 2
       fail-fast: false

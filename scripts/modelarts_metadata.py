@@ -219,7 +219,7 @@ def parse_repositories(value: str) -> list[str]:
     repositories = []
     for item in re.split(r"[\s,]+", value.strip()):
         if item:
-            repositories.append(item.rstrip("/"))
+            repositories.append(item.rstrip("/").lower())
     if not repositories:
         raise MetadataError("at least one image repository is required")
     return repositories
@@ -269,16 +269,16 @@ def command_publish_matrix(args: argparse.Namespace) -> None:
 
 
 def command_batch_matrix(args: argparse.Namespace) -> None:
-    tags = [
-        entry["tags"][0]
+    include = [
+        {"modelarts_tag": entry["tags"][0]}
         for entry in metadata_entries(args.metadata)
         if entry["modelarts_version"] == args.modelarts_version
     ]
-    if not tags:
+    if not include:
         raise MetadataError(
             f"no ModelArts image matches version '{args.modelarts_version}'"
         )
-    print_json({"modelarts_tag": tags})
+    print_json({"include": include})
 
 
 def command_repositories(args: argparse.Namespace) -> None:

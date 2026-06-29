@@ -110,30 +110,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR
-        if: ${{ inputs.image_repositories == '' || contains(inputs.image_repositories, 'ghcr.io/') }}
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to DockerHub
-        if: ${{ contains(inputs.image_repositories, 'docker.io/') }}
-        uses: docker/login-action@v4
-        with:
-          registry: docker.io
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Login to Quay
-        if: ${{ contains(inputs.image_repositories, 'quay.io/') }}
-        uses: docker/login-action@v4
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_TOKEN }}
-
       - name: Resolve repositories
         id: repositories
         run: |
@@ -145,6 +121,30 @@ jobs:
               --format newline
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
+
+      - name: Login to GHCR
+        if: ${{ contains(steps.repositories.outputs.repositories, 'ghcr.io/') }}
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to DockerHub
+        if: ${{ contains(steps.repositories.outputs.repositories, 'docker.io/') }}
+        uses: docker/login-action@v4
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Login to Quay
+        if: ${{ contains(steps.repositories.outputs.repositories, 'quay.io/') }}
+        uses: docker/login-action@v4
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
 
       - name: Build and push by digest
         uses: docker/build-push-action@v6
@@ -185,7 +185,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-${{ inputs.modelarts_tag }}-*
@@ -194,8 +194,20 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Resolve repositories
+        id: repositories
+        run: |
+          REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}"
+          {
+            echo "repositories<<EOF"
+            python3 scripts/modelarts_metadata.py repositories \
+              --repositories "${REPOSITORIES}" \
+              --format newline
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Login to GHCR
-        if: ${{ inputs.image_repositories == '' || contains(inputs.image_repositories, 'ghcr.io/') }}
+        if: ${{ contains(steps.repositories.outputs.repositories, 'ghcr.io/') }}
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -203,7 +215,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to DockerHub
-        if: ${{ contains(inputs.image_repositories, 'docker.io/') }}
+        if: ${{ contains(steps.repositories.outputs.repositories, 'docker.io/') }}
         uses: docker/login-action@v4
         with:
           registry: docker.io
@@ -211,7 +223,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Login to Quay
-        if: ${{ contains(inputs.image_repositories, 'quay.io/') }}
+        if: ${{ contains(steps.repositories.outputs.repositories, 'quay.io/') }}
         uses: docker/login-action@v4
         with:
           registry: quay.io

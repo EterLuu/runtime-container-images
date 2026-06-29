@@ -69,6 +69,8 @@ IMAGE_REPOSITORIES="ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelar
 ghcr.io/<github-owner>/modelarts-cann:<tag>
 ```
 
+发布脚本会把仓库名统一转换为小写；例如 GitHub owner `EterLuu` 会发布到 `ghcr.io/eterluu/modelarts-cann`。
+
 如果 `image_repositories` 为空，workflow 使用 GHCR 和 `GITHUB_TOKEN`。如果要发布到 DockerHub 或 Quay，需要在仓库 Secrets 中配置：
 
 | 目标      | Secrets                           |

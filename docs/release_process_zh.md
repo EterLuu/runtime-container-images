@@ -78,6 +78,8 @@ IMAGE_REPOSITORY=modelarts-cann \
 ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann,quay.io/<namespace>/modelarts-cann
 ```
 
+仓库名会自动转换为小写；例如 `ghcr.io/EterLuu/modelarts-cann` 会规范化为 `ghcr.io/eterluu/modelarts-cann`。
+
 发布流程会先按架构推送 digest，再创建并推送最终 manifest list，因此最终 tag 是多架构镜像。
 
 ## 5. 批量发布
