@@ -112,7 +112,7 @@ jobs:
 
       - name: Login to GHCR
         if: ${{ inputs.image_repositories == '' || contains(inputs.image_repositories, 'ghcr.io/') }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -120,7 +120,7 @@ jobs:
 
       - name: Login to DockerHub
         if: ${{ contains(inputs.image_repositories, 'docker.io/') }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: docker.io
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -128,7 +128,7 @@ jobs:
 
       - name: Login to Quay
         if: ${{ contains(inputs.image_repositories, 'quay.io/') }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
@@ -196,7 +196,7 @@ jobs:
 
       - name: Login to GHCR
         if: ${{ inputs.image_repositories == '' || contains(inputs.image_repositories, 'ghcr.io/') }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -204,7 +204,7 @@ jobs:
 
       - name: Login to DockerHub
         if: ${{ contains(inputs.image_repositories, 'docker.io/') }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: docker.io
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -212,7 +212,7 @@ jobs:
 
       - name: Login to Quay
         if: ${{ contains(inputs.image_repositories, 'quay.io/') }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
