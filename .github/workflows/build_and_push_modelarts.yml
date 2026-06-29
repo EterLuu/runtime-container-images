@@ -12,7 +12,7 @@ on:
         default: false
         type: boolean
       image_repositories:
-        description: "Comma or whitespace separated repositories. Defaults to ghcr.io/<owner>/modelarts-cann"
+        description: "Comma or whitespace separated repositories. Supports GHCR, DockerHub, Quay, and Huawei Cloud SWR."
         default: ""
         type: string
   workflow_dispatch:
@@ -27,7 +27,7 @@ on:
         default: false
         type: boolean
       image_repositories:
-        description: "Comma or whitespace separated repositories. Defaults to ghcr.io/<owner>/modelarts-cann"
+        description: "Comma or whitespace separated repositories. Supports GHCR, DockerHub, Quay, and Huawei Cloud SWR."
         required: false
         default: ""
         type: string
@@ -152,6 +152,44 @@ jobs:
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_TOKEN }}
 
+      - name: Login to Huawei Cloud SWR
+        if: ${{ contains(steps.repositories.outputs.repositories, 'myhuaweicloud.com/') }}
+        env:
+          REPOSITORIES: ${{ steps.repositories.outputs.repositories }}
+          SWR_USERNAME: ${{ secrets.SWR_USERNAME }}
+          SWR_PASSWORD: ${{ secrets.SWR_PASSWORD }}
+          SWR_TOKEN: ${{ secrets.SWR_TOKEN }}
+          HW_USERNAME: ${{ secrets.HW_USERNAME }}
+          HW_TOKEN: ${{ secrets.HW_TOKEN }}
+        run: |
+          registries=()
+          readarray -t repositories <<< "${REPOSITORIES}"
+          for repository in "${repositories[@]}"; do
+            [[ -z "${repository}" ]] && continue
+            registry="${repository%%/*}"
+            if [[ "${registry}" == *".myhuaweicloud.com" ]]; then
+              registries+=("${registry}")
+            fi
+          done
+
+          if [[ "${#registries[@]}" -eq 0 ]]; then
+            exit 0
+          fi
+
+          username="${SWR_USERNAME:-${HW_USERNAME:-}}"
+          password="${SWR_PASSWORD:-${SWR_TOKEN:-${HW_TOKEN:-}}}"
+
+          if [[ -z "${username}" || -z "${password}" ]]; then
+            echo "error: configure SWR_USERNAME/SWR_PASSWORD or HW_USERNAME/HW_TOKEN secrets for Huawei Cloud SWR"
+            exit 1
+          fi
+
+          printf '%s\n' "${registries[@]}" | sort -u | while IFS= read -r registry; do
+            echo "${password}" | docker login "${registry}" \
+              --username "${username}" \
+              --password-stdin
+          done
+
       - name: Build and push by digest
         uses: docker/build-push-action@v6
         id: build
@@ -235,6 +273,44 @@ jobs:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Login to Huawei Cloud SWR
+        if: ${{ contains(steps.repositories.outputs.repositories, 'myhuaweicloud.com/') }}
+        env:
+          REPOSITORIES: ${{ steps.repositories.outputs.repositories }}
+          SWR_USERNAME: ${{ secrets.SWR_USERNAME }}
+          SWR_PASSWORD: ${{ secrets.SWR_PASSWORD }}
+          SWR_TOKEN: ${{ secrets.SWR_TOKEN }}
+          HW_USERNAME: ${{ secrets.HW_USERNAME }}
+          HW_TOKEN: ${{ secrets.HW_TOKEN }}
+        run: |
+          registries=()
+          readarray -t repositories <<< "${REPOSITORIES}"
+          for repository in "${repositories[@]}"; do
+            [[ -z "${repository}" ]] && continue
+            registry="${repository%%/*}"
+            if [[ "${registry}" == *".myhuaweicloud.com" ]]; then
+              registries+=("${registry}")
+            fi
+          done
+
+          if [[ "${#registries[@]}" -eq 0 ]]; then
+            exit 0
+          fi
+
+          username="${SWR_USERNAME:-${HW_USERNAME:-}}"
+          password="${SWR_PASSWORD:-${SWR_TOKEN:-${HW_TOKEN:-}}}"
+
+          if [[ -z "${username}" || -z "${password}" ]]; then
+            echo "error: configure SWR_USERNAME/SWR_PASSWORD or HW_USERNAME/HW_TOKEN secrets for Huawei Cloud SWR"
+            exit 1
+          fi
+
+          printf '%s\n' "${registries[@]}" | sort -u | while IFS= read -r registry; do
+            echo "${password}" | docker login "${registry}" \
+              --username "${username}" \
+              --password-stdin
+          done
 
       - name: Prepare tags
         id: tags

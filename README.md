@@ -57,7 +57,7 @@ IMAGE_REPOSITORIES=ghcr.io/<owner>/modelarts-cann \
 `IMAGE_REPOSITORIES` 支持逗号或空白分隔的多个仓库，例如：
 
 ```bash
-IMAGE_REPOSITORIES="ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann"
+IMAGE_REPOSITORIES="ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann,swr.cn-southwest-2.myhuaweicloud.com/<organization>/modelarts-cann"
 ```
 
 ## GitHub Actions
@@ -74,12 +74,13 @@ ghcr.io/<github-owner>/modelarts-cann:<tag>
 
 发布脚本会把仓库名统一转换为小写；例如 GitHub owner `EterLuu` 会发布到 `ghcr.io/eterluu/modelarts-cann`。
 
-如果 `image_repositories` 为空，workflow 使用 GHCR 和 `GITHUB_TOKEN`。如果要发布到 DockerHub 或 Quay，需要在仓库 Secrets 中配置：
+如果 `image_repositories` 为空，workflow 使用 GHCR 和 `GITHUB_TOKEN`。如果要发布到 DockerHub、Quay 或 Huawei Cloud SWR，需要在仓库 Secrets 中配置：
 
-| 目标      | Secrets                           |
-| --------- | --------------------------------- |
+| 目标 | Secrets |
+| --- | --- |
 | DockerHub | `DOCKER_USERNAME`, `DOCKER_TOKEN` |
-| Quay.io   | `QUAY_USERNAME`, `QUAY_TOKEN`     |
+| Quay.io | `QUAY_USERNAME`, `QUAY_TOKEN` |
+| Huawei Cloud SWR | `SWR_USERNAME`, `SWR_PASSWORD`；也兼容 `SWR_TOKEN` 或 `HW_USERNAME`, `HW_TOKEN` |
 
 ## 新增镜像版本
 

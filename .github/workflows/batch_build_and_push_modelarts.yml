@@ -13,7 +13,7 @@ on:
         default: false
         type: boolean
       image_repositories:
-        description: "Comma or whitespace separated repositories. Defaults to ghcr.io/<owner>/modelarts-cann"
+        description: "Comma or whitespace separated repositories. Supports GHCR, DockerHub, Quay, and Huawei Cloud SWR."
         required: false
         default: ""
         type: string

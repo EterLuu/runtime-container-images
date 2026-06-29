@@ -77,7 +77,7 @@ IMAGE_REPOSITORY=modelarts-cann \
 发布到多个仓库时使用逗号或空白分隔：
 
 ```text
-ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann,quay.io/<namespace>/modelarts-cann
+ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann,quay.io/<namespace>/modelarts-cann,swr.cn-southwest-2.myhuaweicloud.com/<organization>/modelarts-cann
 ```
 
 仓库名会自动转换为小写；例如 `ghcr.io/EterLuu/modelarts-cann` 会规范化为 `ghcr.io/eterluu/modelarts-cann`。
@@ -100,10 +100,11 @@ ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann,quay.io/<nam
 
 默认 GHCR 发布使用 `GITHUB_TOKEN`，需要 workflow 具备 `packages: write` 权限。发布到其他仓库时配置以下 Secrets：
 
-| 目标      | Secrets                           |
-| --------- | --------------------------------- |
-| DockerHub | `DOCKER_USERNAME`, `DOCKER_TOKEN` |
-| Quay.io   | `QUAY_USERNAME`, `QUAY_TOKEN`     |
+| 目标             | Secrets                                                                         |
+| ---------------- | ------------------------------------------------------------------------------- |
+| DockerHub        | `DOCKER_USERNAME`, `DOCKER_TOKEN`                                               |
+| Quay.io          | `QUAY_USERNAME`, `QUAY_TOKEN`                                                   |
+| Huawei Cloud SWR | `SWR_USERNAME`, `SWR_PASSWORD`；也兼容 `SWR_TOKEN` 或 `HW_USERNAME`, `HW_TOKEN` |
 
 ## 7. 常见问题
 
@@ -111,9 +112,9 @@ ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann,quay.io/<nam
 
 检查 `modelarts_publish_version.json` 中 `arches[].runner` 是否与仓库可用 runner 名称一致。GitHub 托管 ARM runner 不可用时，可以改成自托管 runner label。
 
-### 发布到 DockerHub 或 Quay 登录失败
+### 发布到 DockerHub、Quay 或 Huawei Cloud SWR 登录失败
 
-确认 `image_repositories` 中包含的 registry 与 Secrets 匹配。例如发布到 `docker.io/<namespace>/modelarts-cann` 时必须配置 `DOCKER_USERNAME` 和 `DOCKER_TOKEN`。
+确认 `image_repositories` 中包含的 registry 与 Secrets 匹配。例如发布到 `docker.io/<namespace>/modelarts-cann` 时必须配置 `DOCKER_USERNAME` 和 `DOCKER_TOKEN`；发布到 `swr.cn-southwest-2.myhuaweicloud.com/<organization>/modelarts-cann` 时必须配置 SWR 对应凭据。
 
 ### 需要新增别名 tag
 
