@@ -43,7 +43,7 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate metadata
         run: python3 scripts/modelarts_metadata.py validate
@@ -64,7 +64,7 @@ jobs:
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Free up disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
@@ -99,7 +99,7 @@ jobs:
       INPUT_IMAGE_REPOSITORIES: ${{ inputs.image_repositories }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Free up disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
@@ -182,7 +182,7 @@ jobs:
       INPUT_IMAGE_REPOSITORIES: ${{ inputs.image_repositories }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download digests
         uses: actions/download-artifact@v4
