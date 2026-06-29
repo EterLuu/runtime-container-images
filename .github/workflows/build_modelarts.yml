@@ -67,6 +67,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           platforms: ${{ matrix.platform }}
+          build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
           file: ${{ github.workspace }}/${{ matrix.path }}/Dockerfile
           context: ${{ github.workspace }}/${{ matrix.path }}
           outputs: type=image

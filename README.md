@@ -5,8 +5,8 @@
 ## 目录结构
 
 ```text
-modelarts/<tag>/Dockerfile          # 每个镜像版本的构建上下文
-modelarts_publish_version.json      # 镜像版本、标签、平台和 runner 元数据
+modelarts/<template-tag>/Dockerfile # 镜像模板构建上下文
+modelarts_publish_version.json      # 镜像版本、衍生芯片、标签、平台和 runner 元数据
 scripts/modelarts_metadata.py       # CI 和本地脚本共用的元数据解析工具
 scripts/build_modelarts.sh          # 本地构建脚本
 scripts/publish_modelarts.sh        # 本地 buildx 发布脚本
@@ -17,10 +17,15 @@ scripts/publish_modelarts.sh        # 本地 buildx 发布脚本
 
 ## 当前镜像
 
-| 标签 | 基础镜像 | 默认用户 | 默认 Conda 环境 |
-| --- | --- | --- | --- |
-| `9.0.0-910b-ubuntu22.04` | `ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11` | `ma-user` | `torch_2.9` |
+| 标签                     | 基础镜像                                      | 默认用户  | 默认 Conda 环境 |
+| ------------------------ | --------------------------------------------- | --------- | --------------- |
+| `9.0.0-910b-ubuntu22.04` | `ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11` | `ma-user` | `torch_2.9`     |
+| `9.0.0-310p-ubuntu22.04` | `ascendai/cann:9.0.0-310p-ubuntu22.04-py3.11` | `ma-user` | `torch_2.9`     |
+| `9.0.0-910-ubuntu22.04`  | `ascendai/cann:9.0.0-910-ubuntu22.04-py3.11`  | `ma-user` | `torch_2.9`     |
+| `9.0.0-950-ubuntu22.04`  | `ascendai/cann:9.0.0-950-ubuntu22.04-py3.11`  | `ma-user` | `torch_2.9`     |
+| `9.0.0-a3-ubuntu22.04`   | `ascendai/cann:9.0.0-a3-ubuntu22.04-py3.11`   | `ma-user` | `torch_2.9`     |
 
+`9.0.0-910b-ubuntu22.04` 是模板目录；其它芯片版本由 `derived_chips` 自动展开，构建时仅替换 Dockerfile 顶层 `BASE_IMAGE`。
 镜像内置 ModelArts 常用用户和目录约定，并创建多个 Ascend NPU 适配的 PyTorch/torch-npu Conda 环境。
 
 ## 本地构建
@@ -35,7 +40,7 @@ python3 scripts/modelarts_metadata.py validate
 
 ```bash
 IMAGE_REPOSITORY=modelarts-cann \
-  scripts/build_modelarts.sh 9.0.0-910b-ubuntu22.04
+  scripts/build_modelarts.sh 9.0.0-310p-ubuntu22.04
 ```
 
 发布多架构镜像：
@@ -66,15 +71,16 @@ ghcr.io/<github-owner>/modelarts-cann:<tag>
 
 如果 `image_repositories` 为空，workflow 使用 GHCR 和 `GITHUB_TOKEN`。如果要发布到 DockerHub 或 Quay，需要在仓库 Secrets 中配置：
 
-| 目标 | Secrets |
-| --- | --- |
+| 目标      | Secrets                           |
+| --------- | --------------------------------- |
 | DockerHub | `DOCKER_USERNAME`, `DOCKER_TOKEN` |
-| Quay.io | `QUAY_USERNAME`, `QUAY_TOKEN` |
+| Quay.io   | `QUAY_USERNAME`, `QUAY_TOKEN`     |
 
 ## 新增镜像版本
 
 1. 新增目录 `modelarts/<tag>/Dockerfile`。
 2. 在 `modelarts_publish_version.json` 中新增一条 `versions` 记录。
+   如果多个芯片只需要替换基础镜像，在模板记录中配置 `chip` 和 `derived_chips`，无需新增多个 Dockerfile。
 3. 执行 `python3 scripts/modelarts_metadata.py validate`。
 4. 提交 PR，等待 `Build ModelArts Image` 验证。
 5. 合并后手动运行 `Build and Publish ModelArts Image` 或 `Batch Build and Publish ModelArts Image`。

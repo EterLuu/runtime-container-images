@@ -10,13 +10,23 @@
 <cann-version>-<chip>-<os><os-version>
 ```
 
-当前示例：
+当前模板示例：
 
 ```text
 9.0.0-910b-ubuntu22.04
 ```
 
 该标签表示镜像基于 `ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11`，适配 Ascend 910B，操作系统为 Ubuntu 22.04。
+当前模板会自动衍生以下 tag：
+
+```text
+9.0.0-310p-ubuntu22.04
+9.0.0-910-ubuntu22.04
+9.0.0-950-ubuntu22.04
+9.0.0-a3-ubuntu22.04
+```
+
+衍生过程只替换 Dockerfile 顶层 `BASE_IMAGE`，例如把 `ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11` 替换为 `ascendai/cann:9.0.0-310p-ubuntu22.04-py3.11`。
 
 ## 2. 新增或更新镜像
 
@@ -24,6 +34,9 @@
 2. 更新 `modelarts_publish_version.json`：
    - `path` 指向 Dockerfile 所在目录。
    - `tags` 写入要发布的 tag 列表。
+   - `chip` 写模板芯片，例如 `910b`。
+   - `derived_chips` 写可由模板衍生的芯片，例如 `["310p", "910", "950", "a3"]`。
+   - `base_image` 写模板基础镜像，衍生芯片会自动替换其中的芯片字段。
    - `modelarts_version` 用于批量发布筛选。
    - `arches` 定义目标平台和 GitHub Actions runner。
 3. 本地执行校验：
@@ -36,7 +49,7 @@ python3 scripts/modelarts_metadata.py validate
 
 ```bash
 IMAGE_REPOSITORY=modelarts-cann \
-  scripts/build_modelarts.sh 9.0.0-910b-ubuntu22.04
+  scripts/build_modelarts.sh 9.0.0-310p-ubuntu22.04
 ```
 
 ## 3. PR 构建验证
@@ -44,7 +57,7 @@ IMAGE_REPOSITORY=modelarts-cann \
 提交 PR 后，`Build ModelArts Image` 会自动运行：
 
 - 校验 `modelarts_publish_version.json`。
-- 为每个镜像 tag 和目标平台生成 matrix。
+- 为每个展开后的镜像 tag 和目标平台生成 matrix。
 - 使用 `docker/build-push-action` 构建镜像，但不推送。
 
 如果没有可用的 ARM runner，可以临时在 `modelarts_publish_version.json` 中移除 `linux/arm64` 对应的 `arches` 项，或将 `runner` 改为仓库可用的自托管 runner。
@@ -53,10 +66,10 @@ IMAGE_REPOSITORY=modelarts-cann \
 
 在 GitHub Actions 页面手动运行 `Build and Publish ModelArts Image`：
 
-| 参数 | 说明 |
-| --- | --- |
-| `modelarts_tag` | `modelarts_publish_version.json` 中定义的 tag |
-| `publish` | `true` 时推送镜像；`false` 时只构建 |
+| 参数                 | 说明                                                      |
+| -------------------- | --------------------------------------------------------- |
+| `modelarts_tag`      | `modelarts_publish_version.json` 中定义的 tag             |
+| `publish`            | `true` 时推送镜像；`false` 时只构建                       |
 | `image_repositories` | 发布目标仓库，留空时使用 `ghcr.io/<owner>/modelarts-cann` |
 
 发布到多个仓库时使用逗号或空白分隔：
@@ -71,11 +84,11 @@ ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann,quay.io/<nam
 
 运行 `Batch Build and Publish ModelArts Image`：
 
-| 参数 | 说明 |
-| --- | --- |
-| `modelarts_version` | 匹配 `modelarts_publish_version.json` 中的 `modelarts_version` |
-| `publish` | 是否推送 |
-| `image_repositories` | 发布目标仓库 |
+| 参数                 | 说明                                                           |
+| -------------------- | -------------------------------------------------------------- |
+| `modelarts_version`  | 匹配 `modelarts_publish_version.json` 中的 `modelarts_version` |
+| `publish`            | 是否推送                                                       |
+| `image_repositories` | 发布目标仓库                                                   |
 
 该 workflow 会先生成匹配 tag 列表，再逐个调用 `Build and Publish ModelArts Image`。
 
@@ -83,10 +96,10 @@ ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann,quay.io/<nam
 
 默认 GHCR 发布使用 `GITHUB_TOKEN`，需要 workflow 具备 `packages: write` 权限。发布到其他仓库时配置以下 Secrets：
 
-| 目标 | Secrets |
-| --- | --- |
+| 目标      | Secrets                           |
+| --------- | --------------------------------- |
 | DockerHub | `DOCKER_USERNAME`, `DOCKER_TOKEN` |
-| Quay.io | `QUAY_USERNAME`, `QUAY_TOKEN` |
+| Quay.io   | `QUAY_USERNAME`, `QUAY_TOKEN`     |
 
 ## 7. 常见问题
 

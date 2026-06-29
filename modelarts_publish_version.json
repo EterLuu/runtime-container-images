@@ -3,12 +3,11 @@
     {
       "modelarts_version": "9.0.0",
       "path": "modelarts/9.0.0-910b-ubuntu22.04",
-      "tags": [
-        "9.0.0-910b-ubuntu22.04"
-      ],
+      "tags": ["9.0.0-910b-ubuntu22.04"],
       "base_image": "ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11",
       "cann_version": "9.0.0",
       "chip": "910b",
+      "derived_chips": ["310p", "910", "950", "a3"],
       "os": "ubuntu",
       "os_version": "22.04",
       "python_version": "3.11",
