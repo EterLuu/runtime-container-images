@@ -28,6 +28,8 @@ cd "${REPO_ROOT}"
 
 IMAGE_PATH="$(python3 scripts/modelarts_metadata.py path --modelarts-tag "${MODELARTS_TAG}")"
 BASE_IMAGE="$(python3 scripts/modelarts_metadata.py base-image --modelarts-tag "${MODELARTS_TAG}")"
+scripts/prepare_modelarts_context.sh "${IMAGE_PATH}"
+
 tag_args=()
 while IFS= read -r image_tag; do
   tag_args+=("-t" "${image_tag}")

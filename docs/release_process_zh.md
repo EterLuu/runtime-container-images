@@ -27,6 +27,7 @@
 ```
 
 衍生过程只替换 Dockerfile 顶层 `BASE_IMAGE`，例如把 `ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11` 替换为 `ascendai/cann:9.0.0-310p-ubuntu22.04-py3.11`。
+构建前会自动把 `modelarts/scripts` 复制到目标构建目录的 `scripts/` 下，供 Dockerfile 中的 `COPY scripts/...` 使用。
 
 ## 2. 新增或更新镜像
 
@@ -39,13 +40,14 @@
    - `base_image` 写模板基础镜像，衍生芯片会自动替换其中的芯片字段。
    - `modelarts_version` 用于批量发布筛选。
    - `arches` 定义目标平台和 GitHub Actions runner。
-3. 本地执行校验：
+3. 如果需要更新容器启动或 SSH 逻辑，修改 `modelarts/scripts`，不要提交生成到 `modelarts/<tag>/scripts` 下的副本。
+4. 本地执行校验：
 
 ```bash
 python3 scripts/modelarts_metadata.py validate
 ```
 
-4. 可选，本地构建验证：
+5. 可选，本地构建验证：
 
 ```bash
 IMAGE_REPOSITORY=modelarts-cann \

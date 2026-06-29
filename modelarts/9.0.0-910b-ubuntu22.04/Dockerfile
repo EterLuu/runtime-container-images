@@ -18,12 +18,39 @@ RUN set -eux; \
     fi; \
     apt-get update
 
+# Set the user ma-user whose UID is 1000 and the user group ma-group whose GID is 100
+RUN default_user=$(getent passwd 1000 | awk -F ':' '{print $1}') || echo "uid: 1000 does not exist" \
+    && default_group=$(getent group 100 | awk -F ':' '{print $1}') || echo "gid: 100 does not exist" \
+    && if [ ! -z ${default_user} ] && [ ${default_user} != "ma-user" ]; then \
+    userdel -r ${default_user}; \
+    fi \
+    && if [ ! -z ${default_group} ] && [ ${default_group} != "ma-group" ]; then \
+    groupdel -f ${default_group}; \
+    fi \
+    && groupadd -g 100 ma-group && useradd -d /home/ma-user -m -u 1000 -g 100 -s /bin/bash ma-user \
+    # Grant the read, write, and execute permissions on the target directory to the user ma-user.
+    && chmod -R 750 /home/ma-user
+
 # Allow ma-user to use sudo
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends sudo; \
     echo 'ma-user ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ma-user; \
     chmod 0440 /etc/sudoers.d/ma-user; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+# Install OpenSSH for ModelArts
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        openssh-client \
+        openssh-server \
+        iputils-ping \
+        net-tools; \
+    ssh -V; \
+    mkdir -p /run/sshd; \
+    chmod 0755 /run/sshd; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
@@ -57,21 +84,11 @@ RUN set -eux; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
-# Set the user ma-user whose UID is 1000 and the user group ma-group whose GID is 100
-RUN default_user=$(getent passwd 1000 | awk -F ':' '{print $1}') || echo "uid: 1000 does not exist" \
-    && default_group=$(getent group 100 | awk -F ':' '{print $1}') || echo "gid: 100 does not exist" \
-    && if [ ! -z ${default_user} ] && [ ${default_user} != "ma-user" ]; then \
-    userdel -r ${default_user}; \
-    fi \
-    && if [ ! -z ${default_group} ] && [ ${default_group} != "ma-group" ]; then \
-    groupdel -f ${default_group}; \
-    fi \
-    && groupadd -g 100 ma-group && useradd -d /home/ma-user -m -u 1000 -g 100 -s /bin/bash ma-user \
-    # Grant the read, write, and execute permissions on the target directory to the user ma-user.
-    && chmod -R 750 /home/ma-user
+# Add ssh auto start
+COPY --chmod=755 scripts/start_sshd.sh /usr/local/bin/start_sshd.sh
+COPY --chmod=755 scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-# Modifying the system Configuration of the image (required for creating the Conda environment)
-RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+ENV MY_SSHD_PORT=38888
 
 # Switch to user ma-user, download miniconda from the Tsinghua repository, and install miniconda in /home/ma-user.
 USER ma-user
@@ -201,3 +218,9 @@ RUN set -eux; \
 
 ENV CONDA_DEFAULT_ENV=torch_2.9
 ENV PATH=/home/ma-user/miniconda/envs/torch_2.9/bin:/home/ma-user/miniconda/bin:${PATH}
+
+USER ma-user
+WORKDIR /home/ma-user
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["bash"]

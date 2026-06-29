@@ -6,8 +6,10 @@
 
 ```text
 modelarts/<template-tag>/Dockerfile # 镜像模板构建上下文
+modelarts/scripts/                 # 会被复制进每个构建上下文的运行时脚本
 modelarts_publish_version.json      # 镜像版本、衍生芯片、标签、平台和 runner 元数据
 scripts/modelarts_metadata.py       # CI 和本地脚本共用的元数据解析工具
+scripts/prepare_modelarts_context.sh # 构建前同步 modelarts/scripts 到目标上下文
 scripts/build_modelarts.sh          # 本地构建脚本
 scripts/publish_modelarts.sh        # 本地 buildx 发布脚本
 .github/workflows/build_modelarts.yml
@@ -26,6 +28,7 @@ scripts/publish_modelarts.sh        # 本地 buildx 发布脚本
 | `9.0.0-a3-ubuntu22.04`   | `ascendai/cann:9.0.0-a3-ubuntu22.04-py3.11`   | `ma-user` | `torch_2.9`     |
 
 `9.0.0-910b-ubuntu22.04` 是模板目录；其它芯片版本由 `derived_chips` 自动展开，构建时仅替换 Dockerfile 顶层 `BASE_IMAGE`。
+构建前会把 `modelarts/scripts` 复制到目标构建目录的 `scripts/` 下，供 Dockerfile 中的 `COPY scripts/...` 使用。
 镜像内置 ModelArts 常用用户和目录约定，并创建多个 Ascend NPU 适配的 PyTorch/torch-npu Conda 环境。
 
 ## 本地构建
