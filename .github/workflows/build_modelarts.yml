@@ -1,0 +1,73 @@
+name: Build ModelArts Image
+
+on:
+  push:
+    paths:
+      - ".github/workflows/build_modelarts.yml"
+      - "modelarts/**"
+      - "modelarts_publish_version.json"
+      - "scripts/modelarts_metadata.py"
+      - "scripts/build_modelarts.sh"
+      - "scripts/publish_modelarts.sh"
+  pull_request:
+    branches:
+      - "main"
+    paths:
+      - ".github/workflows/build_modelarts.yml"
+      - "modelarts/**"
+      - "modelarts_publish_version.json"
+      - "scripts/modelarts_metadata.py"
+      - "scripts/build_modelarts.sh"
+      - "scripts/publish_modelarts.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate metadata
+        run: python3 scripts/modelarts_metadata.py validate
+
+      - name: Get build matrix
+        id: matrix
+        run: |
+          MATRIX="$(python3 scripts/modelarts_metadata.py build-matrix)"
+          echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+          docker-images: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          platforms: ${{ matrix.platform }}
+          file: ${{ github.workspace }}/${{ matrix.path }}/Dockerfile
+          context: ${{ github.workspace }}/${{ matrix.path }}
+          outputs: type=image
+          provenance: false

@@ -1,0 +1,30 @@
+{
+  "versions": [
+    {
+      "modelarts_version": "9.0.0",
+      "path": "modelarts/9.0.0-910b-ubuntu22.04",
+      "tags": [
+        "9.0.0-910b-ubuntu22.04"
+      ],
+      "base_image": "ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11",
+      "cann_version": "9.0.0",
+      "chip": "910b",
+      "os": "ubuntu",
+      "os_version": "22.04",
+      "python_version": "3.11",
+      "default_conda_env": "torch_2.9",
+      "arches": [
+        {
+          "platform": "linux/amd64",
+          "runner": "ubuntu-latest",
+          "artifact_arch": "amd64"
+        },
+        {
+          "platform": "linux/arm64",
+          "runner": "ubuntu-22.04-arm",
+          "artifact_arch": "arm64"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+[submodule "cann-container-image"]
+	path = cann-container-image
+	url = https://github.com/Ascend/cann-container-image.git

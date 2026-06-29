@@ -1,0 +1,240 @@
+name: Build and Publish ModelArts Image
+
+on:
+  workflow_call:
+    inputs:
+      modelarts_tag:
+        description: "ModelArts image tag defined in modelarts_publish_version.json"
+        required: true
+        type: string
+      publish:
+        description: "Push the image to registries"
+        default: false
+        type: boolean
+      image_repositories:
+        description: "Comma or whitespace separated repositories. Defaults to ghcr.io/<owner>/modelarts-cann"
+        default: ""
+        type: string
+  workflow_dispatch:
+    inputs:
+      modelarts_tag:
+        description: "ModelArts image tag defined in modelarts_publish_version.json"
+        required: true
+        default: "9.0.0-910b-ubuntu22.04"
+        type: string
+      publish:
+        description: "Push the image to registries"
+        default: false
+        type: boolean
+      image_repositories:
+        description: "Comma or whitespace separated repositories. Defaults to ghcr.io/<owner>/modelarts-cann"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate metadata
+        run: python3 scripts/modelarts_metadata.py validate
+
+      - name: Get publish matrix
+        id: matrix
+        run: |
+          MATRIX="$(python3 scripts/modelarts_metadata.py publish-matrix --modelarts-tag "${{ inputs.modelarts_tag }}")"
+          echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
+
+  only-build:
+    name: build ${{ inputs.modelarts_tag }} (${{ matrix.platform }})
+    if: ${{ !inputs.publish }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+          docker-images: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          platforms: ${{ matrix.platform }}
+          file: ${{ github.workspace }}/${{ matrix.path }}/Dockerfile
+          context: ${{ github.workspace }}/${{ matrix.path }}
+          outputs: type=image
+          provenance: false
+
+  build-push-digest:
+    name: build ${{ inputs.modelarts_tag }} (${{ matrix.platform }})
+    if: ${{ inputs.publish }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      DEFAULT_IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/modelarts-cann
+      INPUT_IMAGE_REPOSITORIES: ${{ inputs.image_repositories }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+          docker-images: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: ${{ inputs.image_repositories == '' || contains(inputs.image_repositories, 'ghcr.io/') }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to DockerHub
+        if: ${{ contains(inputs.image_repositories, 'docker.io/') }}
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Login to Quay
+        if: ${{ contains(inputs.image_repositories, 'quay.io/') }}
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Resolve repositories
+        id: repositories
+        run: |
+          REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}"
+          {
+            echo "repositories<<EOF"
+            python3 scripts/modelarts_metadata.py repositories \
+              --repositories "${REPOSITORIES}" \
+              --format newline
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push by digest
+        uses: docker/build-push-action@v6
+        id: build
+        with:
+          platforms: ${{ matrix.platform }}
+          tags: ${{ steps.repositories.outputs.repositories }}
+          file: ${{ github.workspace }}/${{ matrix.path }}/Dockerfile
+          context: ${{ github.workspace }}/${{ matrix.path }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          provenance: false
+
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ inputs.modelarts_tag }}-${{ matrix.artifact_arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  push-image:
+    if: ${{ inputs.publish }}
+    needs: build-push-digest
+    runs-on: ubuntu-latest
+    env:
+      DEFAULT_IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/modelarts-cann
+      INPUT_IMAGE_REPOSITORIES: ${{ inputs.image_repositories }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ inputs.modelarts_tag }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: ${{ inputs.image_repositories == '' || contains(inputs.image_repositories, 'ghcr.io/') }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to DockerHub
+        if: ${{ contains(inputs.image_repositories, 'docker.io/') }}
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Login to Quay
+        if: ${{ contains(inputs.image_repositories, 'quay.io/') }}
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Prepare tags
+        id: tags
+        run: |
+          REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}"
+          TAGS="$(python3 scripts/modelarts_metadata.py tags \
+            --modelarts-tag "${{ inputs.modelarts_tag }}" \
+            --repositories "${REPOSITORIES}")"
+          echo "tags=${TAGS}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          TAGS: ${{ steps.tags.outputs.tags }}
+        run: |
+          readarray -t TAGS_ARRAY <<< "$(echo "${TAGS}" | jq -r '.[]')"
+
+          for tag in "${TAGS_ARRAY[@]}"; do
+            repository="${tag%:*}"
+            digest_refs=()
+            for digest in *; do
+              digest_refs+=("${repository}@sha256:${digest}")
+            done
+            docker buildx imagetools create -t "${tag}" "${digest_refs[@]}"
+          done
