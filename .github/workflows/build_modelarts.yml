@@ -3,24 +3,12 @@ name: Build ModelArts Image
 on:
   push:
     paths:
-      - ".github/workflows/build_modelarts.yml"
       - "modelarts/**"
-      - "modelarts_publish_version.json"
-      - "scripts/modelarts_metadata.py"
-      - "scripts/prepare_modelarts_context.sh"
-      - "scripts/build_modelarts.sh"
-      - "scripts/publish_modelarts.sh"
   pull_request:
     branches:
       - "main"
     paths:
-      - ".github/workflows/build_modelarts.yml"
       - "modelarts/**"
-      - "modelarts_publish_version.json"
-      - "scripts/modelarts_metadata.py"
-      - "scripts/prepare_modelarts_context.sh"
-      - "scripts/build_modelarts.sh"
-      - "scripts/publish_modelarts.sh"
 
 permissions:
   contents: read
