@@ -12,7 +12,7 @@ on:
         default: false
         type: boolean
       image_repositories:
-        description: "Comma or whitespace separated repositories. Supports GHCR, DockerHub, Quay, and Huawei Cloud SWR."
+        description: "Optional override. Blank uses IMAGE_REPOSITORIES, then defaults to ghcr.io/<owner>/modelarts-cann."
         default: ""
         type: string
   workflow_dispatch:
@@ -27,7 +27,7 @@ on:
         default: false
         type: boolean
       image_repositories:
-        description: "Comma or whitespace separated repositories. Supports GHCR, DockerHub, Quay, and Huawei Cloud SWR."
+        description: "Optional override. Blank uses IMAGE_REPOSITORIES, then defaults to ghcr.io/<owner>/modelarts-cann."
         required: false
         default: ""
         type: string
@@ -35,6 +35,9 @@ on:
 permissions:
   contents: read
   packages: write
+
+env:
+  IMAGE_REPOSITORIES: ${{ vars.IMAGE_REPOSITORIES }}
 
 jobs:
   prepare:
@@ -119,7 +122,7 @@ jobs:
       - name: Resolve repositories
         id: repositories
         run: |
-          REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}"
+          REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}}"
           {
             echo "repositories<<EOF"
             python3 scripts/modelarts_metadata.py repositories \
@@ -162,6 +165,7 @@ jobs:
           HW_USERNAME: ${{ secrets.HW_USERNAME }}
           HW_TOKEN: ${{ secrets.HW_TOKEN }}
         run: |
+          set +x
           registries=()
           readarray -t repositories <<< "${REPOSITORIES}"
           for repository in "${repositories[@]}"; do
@@ -185,7 +189,7 @@ jobs:
           fi
 
           printf '%s\n' "${registries[@]}" | sort -u | while IFS= read -r registry; do
-            echo "${password}" | docker login "${registry}" \
+            printf '%s' "${password}" | docker login "${registry}" \
               --username "${username}" \
               --password-stdin
           done
@@ -241,7 +245,7 @@ jobs:
       - name: Resolve repositories
         id: repositories
         run: |
-          REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}"
+          REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}}"
           {
             echo "repositories<<EOF"
             python3 scripts/modelarts_metadata.py repositories \
@@ -284,6 +288,7 @@ jobs:
           HW_USERNAME: ${{ secrets.HW_USERNAME }}
           HW_TOKEN: ${{ secrets.HW_TOKEN }}
         run: |
+          set +x
           registries=()
           readarray -t repositories <<< "${REPOSITORIES}"
           for repository in "${repositories[@]}"; do
@@ -307,7 +312,7 @@ jobs:
           fi
 
           printf '%s\n' "${registries[@]}" | sort -u | while IFS= read -r registry; do
-            echo "${password}" | docker login "${registry}" \
+            printf '%s' "${password}" | docker login "${registry}" \
               --username "${username}" \
               --password-stdin
           done
@@ -315,7 +320,7 @@ jobs:
       - name: Prepare tags
         id: tags
         run: |
-          REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}"
+          REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}}"
           TAGS="$(python3 scripts/modelarts_metadata.py tags \
             --modelarts-tag "${{ inputs.modelarts_tag }}" \
             --repositories "${REPOSITORIES}")"

@@ -68,11 +68,11 @@ IMAGE_REPOSITORY=modelarts-cann \
 
 在 GitHub Actions 页面手动运行 `Build and Publish ModelArts Image`：
 
-| 参数                 | 说明                                                      |
-| -------------------- | --------------------------------------------------------- |
-| `modelarts_tag`      | `modelarts_publish_version.json` 中定义的 tag             |
-| `publish`            | `true` 时推送镜像；`false` 时只构建                       |
-| `image_repositories` | 发布目标仓库，留空时使用 `ghcr.io/<owner>/modelarts-cann` |
+| 参数                 | 说明                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| `modelarts_tag`      | `modelarts_publish_version.json` 中定义的 tag                                                    |
+| `publish`            | `true` 时推送镜像；`false` 时只构建                                                              |
+| `image_repositories` | 发布目标仓库，留空时使用仓库变量 `IMAGE_REPOSITORIES`，再回退到 `ghcr.io/<owner>/modelarts-cann` |
 
 发布到多个仓库时使用逗号或空白分隔：
 
@@ -81,6 +81,15 @@ ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann,quay.io/<nam
 ```
 
 仓库名会自动转换为小写；例如 `ghcr.io/EterLuu/modelarts-cann` 会规范化为 `ghcr.io/eterluu/modelarts-cann`。
+
+可以在 `Settings -> Secrets and variables -> Actions -> Variables` 中添加仓库变量：
+
+```text
+IMAGE_REPOSITORIES=swr.cn-southwest-2.myhuaweicloud.com/<organization>/modelarts-cann
+```
+
+手动运行 workflow 时，`image_repositories` 输入为空会自动使用该变量；填写输入值则覆盖该变量。
+`IMAGE_REPOSITORIES` 和 `image_repositories` 只能包含镜像仓库地址，不要写入用户名、密码、token 或 URL scheme。登录凭据必须放在 Secrets 中。
 
 发布流程会先按架构推送 digest，再创建并推送最终 manifest list，因此最终 tag 是多架构镜像。
 

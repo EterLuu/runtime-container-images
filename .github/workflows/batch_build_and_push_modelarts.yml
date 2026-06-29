@@ -13,7 +13,7 @@ on:
         default: false
         type: boolean
       image_repositories:
-        description: "Comma or whitespace separated repositories. Supports GHCR, DockerHub, Quay, and Huawei Cloud SWR."
+        description: "Optional override. Blank uses IMAGE_REPOSITORIES, then defaults to ghcr.io/<owner>/modelarts-cann."
         required: false
         default: ""
         type: string
@@ -21,6 +21,9 @@ on:
 permissions:
   contents: read
   packages: write
+
+env:
+  IMAGE_REPOSITORIES: ${{ vars.IMAGE_REPOSITORIES }}
 
 concurrency:
   group: batch-modelarts

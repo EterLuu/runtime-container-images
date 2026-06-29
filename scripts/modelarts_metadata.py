@@ -219,6 +219,10 @@ def parse_repositories(value: str) -> list[str]:
     repositories = []
     for item in re.split(r"[\s,]+", value.strip()):
         if item:
+            if "://" in item or "@" in item:
+                raise MetadataError(
+                    "repository entries must not include URL schemes or credentials"
+                )
             repositories.append(item.rstrip("/").lower())
     if not repositories:
         raise MetadataError("at least one image repository is required")

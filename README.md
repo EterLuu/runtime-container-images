@@ -74,12 +74,22 @@ ghcr.io/<github-owner>/modelarts-cann:<tag>
 
 发布脚本会把仓库名统一转换为小写；例如 GitHub owner `EterLuu` 会发布到 `ghcr.io/eterluu/modelarts-cann`。
 
-如果 `image_repositories` 为空，workflow 使用 GHCR 和 `GITHUB_TOKEN`。如果要发布到 DockerHub、Quay 或 Huawei Cloud SWR，需要在仓库 Secrets 中配置：
+GitHub Actions 会优先使用手动输入的 `image_repositories`。如果该输入为空，会读取仓库变量 `IMAGE_REPOSITORIES`；如果变量也为空，才使用默认 GHCR。
 
-| 目标 | Secrets |
-| --- | --- |
-| DockerHub | `DOCKER_USERNAME`, `DOCKER_TOKEN` |
-| Quay.io | `QUAY_USERNAME`, `QUAY_TOKEN` |
+在 `Settings -> Secrets and variables -> Actions -> Variables` 中添加：
+
+```text
+IMAGE_REPOSITORIES=swr.cn-southwest-2.myhuaweicloud.com/<organization>/modelarts-cann
+```
+
+`IMAGE_REPOSITORIES` 只能包含镜像仓库地址，不要写入用户名、密码、token 或 URL scheme。登录凭据必须放在 Secrets 中。
+
+如果要发布到 DockerHub、Quay 或 Huawei Cloud SWR，需要在仓库 Secrets 中配置：
+
+| 目标             | Secrets                                                                         |
+| ---------------- | ------------------------------------------------------------------------------- |
+| DockerHub        | `DOCKER_USERNAME`, `DOCKER_TOKEN`                                               |
+| Quay.io          | `QUAY_USERNAME`, `QUAY_TOKEN`                                                   |
 | Huawei Cloud SWR | `SWR_USERNAME`, `SWR_PASSWORD`；也兼容 `SWR_TOKEN` 或 `HW_USERNAME`, `HW_TOKEN` |
 
 ## 新增镜像版本
