@@ -3,7 +3,7 @@ FROM ${BASE_IMAGE}
 
 USER root
 
-# Config apt source to Huawei Cloud
+# Config apt source to Huawei Cloud and install packages
 RUN set -eux; \
     if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
         cp -a /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.bak; \
@@ -16,25 +16,41 @@ RUN set -eux; \
         sed -i 's@http://[^ ]*security.ubuntu.com@http://mirrors.huaweicloud.com@g' /etc/apt/sources.list; \
         sed -i 's@http://ports.ubuntu.com/ubuntu-ports@http://mirrors.huaweicloud.com/ubuntu-ports@g' /etc/apt/sources.list; \
     fi; \
-    apt-get update
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        openssh-client \
+        openssh-server \
+        iputils-ping \
+        net-tools \
+        sudo \
+        ffmpeg \
+        curl \
+        ca-certificates \
+        git \
+        openssh-client \
+        vim \
+        less \
+        bash-completion \
+        htop \
+        p7zip-full \
+        tmux \
+        dumb-init
 
 # Set the user ma-user whose UID is 1000 and the user group ma-group whose GID is 100
-RUN default_user=$(getent passwd 1000 | awk -F ':' '{print $1}') || echo "uid: 1000 does not exist" \
-    && default_group=$(getent group 100 | awk -F ':' '{print $1}') || echo "gid: 100 does not exist" \
-    && if [ ! -z ${default_user} ] && [ ${default_user} != "ma-user" ]; then \
+RUN default_user=$(getent passwd 1000 | awk -F ':' '{print $1}') || echo "uid: 1000 does not exist"; \
+    default_group=$(getent group 100 | awk -F ':' '{print $1}') || echo "gid: 100 does not exist"; \
+    if [ ! -z ${default_user} ] && [ ${default_user} != "ma-user" ]; then \
     userdel -r ${default_user}; \
-    fi \
-    && if [ ! -z ${default_group} ] && [ ${default_group} != "ma-group" ]; then \
+    fi; \
+    if [ ! -z ${default_group} ] && [ ${default_group} != "ma-group" ]; then \
     groupdel -f ${default_group}; \
-    fi \
-    && groupadd -g 100 ma-group && useradd -d /home/ma-user -m -u 1000 -g 100 -s /bin/bash ma-user \
+    fi; \
+    groupadd -g 100 ma-group && useradd -d /home/ma-user -m -u 1000 -g 100 -s /bin/bash ma-user; \
     # Grant the read, write, and execute permissions on the target directory to the user ma-user.
-    && chmod -R 750 /home/ma-user
+    chmod -R 750 /home/ma-user
 
 # Allow ma-user to use sudo
 RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends sudo; \
     echo 'ma-user ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ma-user; \
     chmod 0440 /etc/sudoers.d/ma-user; \
     apt-get clean; \
@@ -42,12 +58,6 @@ RUN set -eux; \
 
 # Install OpenSSH for ModelArts
 RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        openssh-client \
-        openssh-server \
-        iputils-ping \
-        net-tools; \
     ssh -V; \
     mkdir -p /run/sshd; \
     chmod 0755 /run/sshd; \
@@ -58,17 +68,6 @@ RUN set -eux; \
 ARG CODE_SERVER_VERSION=4.20.1
 
 RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        ffmpeg \
-        curl \
-        ca-certificates \
-        git \
-        openssh-client \
-        vim \
-        less \
-        bash-completion \
-        dumb-init; \
     ARCH="$(dpkg --print-architecture)"; \
     case "${ARCH}" in \
         amd64) CODE_SERVER_ARCH="amd64" ;; \
