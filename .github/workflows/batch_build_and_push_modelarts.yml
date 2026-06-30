@@ -54,7 +54,6 @@ jobs:
       contents: read
       packages: write
     strategy:
-      max-parallel: 2
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/build_and_push_modelarts.yml

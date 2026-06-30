@@ -62,7 +62,7 @@ IMAGE_REPOSITORIES="ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelar
 
 ## GitHub Actions
 
-- `Build ModelArts Image`：PR 或 push 修改 `modelarts/**`、元数据、脚本或 workflow 时自动构建，不推送镜像。
+- `Build ModelArts Image`：PR 或 push 修改 `modelarts/**` 时自动构建实际存在的 `modelarts/<tag>` 目录，不展开 `derived_chips`，不推送镜像。
 - `Build and Publish ModelArts Image`：手动或被其他 workflow 调用，支持只构建或构建并发布指定 tag。
 - `Batch Build and Publish ModelArts Image`：按 `modelarts_version` 批量调用发布 workflow。
 

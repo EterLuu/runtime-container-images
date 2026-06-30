@@ -149,7 +149,7 @@ def expand_entry(entry: dict) -> list[dict]:
     return expanded
 
 
-def validate_entries(data: dict, root: Path) -> list[dict]:
+def validate_entries(data: dict, root: Path, expand: bool = True) -> list[dict]:
     raw_entries = data["versions"]
     entries = []
 
@@ -186,7 +186,12 @@ def validate_entries(data: dict, root: Path) -> list[dict]:
             raise MetadataError(f"{path}: base_image is required")
 
         entry["arches"] = entry_arches(entry)
-        entries.extend(expand_entry(entry))
+        if expand:
+            entries.extend(expand_entry(entry))
+        else:
+            raw_entry = copy.deepcopy(entry)
+            raw_entry.pop("derived_chips", None)
+            entries.append(raw_entry)
 
     seen_tags: dict[str, str] = {}
     for entry in entries:
@@ -202,9 +207,9 @@ def validate_entries(data: dict, root: Path) -> list[dict]:
     return entries
 
 
-def metadata_entries(metadata_path: str) -> list[dict]:
+def metadata_entries(metadata_path: str, expand: bool = True) -> list[dict]:
     data = load_metadata(metadata_path)
-    return validate_entries(data, repo_root())
+    return validate_entries(data, repo_root(), expand=expand)
 
 
 def select_entry(entries: list[dict], tag: str) -> dict:
@@ -240,7 +245,7 @@ def command_validate(args: argparse.Namespace) -> None:
 
 def command_build_matrix(args: argparse.Namespace) -> None:
     include = []
-    for entry in metadata_entries(args.metadata):
+    for entry in metadata_entries(args.metadata, expand=False):
         for arch in entry["arches"]:
             include.append(
                 {

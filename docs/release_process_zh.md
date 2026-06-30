@@ -59,7 +59,7 @@ IMAGE_REPOSITORY=modelarts-cann \
 提交 PR 后，`Build ModelArts Image` 会自动运行：
 
 - 校验 `modelarts_publish_version.json`。
-- 为每个展开后的镜像 tag 和目标平台生成 matrix。
+- 只为实际存在的 `modelarts/<tag>` 目录和目标平台生成 matrix，不展开 `derived_chips`。
 - 使用 `docker/build-push-action` 构建镜像，但不推送。
 
 如果没有可用的 ARM runner，可以临时在 `modelarts_publish_version.json` 中移除 `linux/arm64` 对应的 `arches` 项，或将 `runner` 改为仓库可用的自托管 runner。
