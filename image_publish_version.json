@@ -14,11 +14,6 @@
       "default_conda_env": "torch-2.9",
       "arches": [
         {
-          "platform": "linux/amd64",
-          "runner": "ubuntu-latest",
-          "artifact_arch": "amd64"
-        },
-        {
           "platform": "linux/arm64",
           "runner": "ubuntu-22.04-arm",
           "artifact_arch": "arm64"
