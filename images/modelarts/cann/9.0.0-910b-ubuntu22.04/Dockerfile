@@ -149,7 +149,9 @@ RUN set -eux; \
     create_npu_env() { \
         local ENV_NAME="$1"; \
         local TORCH_VERSION="$2"; \
-        local TORCH_NPU_VERSION="$3"; \
+        local TORCHVISION_VERSION="$3"; \
+        local TORCHAUDIO_VERSION="$4"; \
+        local TORCH_NPU_VERSION="$5"; \
         \
         conda create -y --name "${ENV_NAME}" python=3.11 pip "numpy<2.0"; \
         conda activate "${ENV_NAME}"; \
@@ -161,15 +163,15 @@ RUN set -eux; \
             python -m pip install \
                 --index-url "${PYTORCH_CPU_INDEX_URL}" \
                 "torch==${TORCH_VERSION}+cpu" \
-                torchvision \
-                torchaudio; \
+                "torchvision==${TORCHVISION_VERSION}+cpu" \
+                "torchaudio==${TORCHAUDIO_VERSION}+cpu"; \
         elif [[ "${ARCH}" == "aarch64" ]]; then \
             python -m pip install \
                 -i "${PYPI_INDEX_URL}" \
                 --trusted-host "${PYPI_TRUSTED_HOST}" \
                 "torch==${TORCH_VERSION}" \
-                torchvision \
-                torchaudio; \
+                "torchvision==${TORCHVISION_VERSION}" \
+                "torchaudio==${TORCHAUDIO_VERSION}"; \
         else \
             echo "Unsupported architecture: ${ARCH}" >&2; \
             exit 1; \
@@ -212,10 +214,10 @@ RUN set -eux; \
         conda deactivate; \
     }; \
     \
-    create_npu_env torch-2.10 2.10.0 2.10.0; \
-    create_npu_env torch-2.9  2.9.0  2.9.0.post2; \
-    create_npu_env torch-2.8  2.8.0  2.8.0.post4; \
-    create_npu_env torch-2.7.1  2.7.1  2.7.1.post4; \
+    create_npu_env torch-2.10 2.10.0 0.25.0 2.10.0 2.10.0; \
+    create_npu_env torch-2.9  2.9.0  0.24.0 2.9.0  2.9.0.post2; \
+    create_npu_env torch-2.8  2.8.0  0.23.0 2.8.0  2.8.0.post4; \
+    create_npu_env torch-2.7.1  2.7.1  0.22.1 2.7.1  2.7.1.post4; \
     \
     conda clean -afy; \
     rm -rf /home/ma-user/.cache/pip /tmp/pip-constraints.txt; \
