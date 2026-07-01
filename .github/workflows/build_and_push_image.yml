@@ -119,6 +119,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
       DEFAULT_IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}
@@ -143,13 +144,37 @@ jobs:
         id: repositories
         run: |
           REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}}"
+          RESOLVED_REPOSITORIES="$(python3 scripts/image_metadata.py repositories \
+            --image-tag "${{ matrix.image_tag }}" \
+            --image-key "${{ matrix.image_key }}" \
+            --repositories "${REPOSITORIES}" \
+            --format newline)"
+
+          non_swr_repositories=()
+          swr_repositories=()
+          while IFS= read -r repository; do
+            [[ -z "${repository}" ]] && continue
+            registry="${repository%%/*}"
+            if [[ "${registry}" == *".myhuaweicloud.com" ]]; then
+              swr_repositories+=("${repository}")
+            else
+              non_swr_repositories+=("${repository}")
+            fi
+          done <<< "${RESOLVED_REPOSITORIES}"
+
           {
             echo "repositories<<EOF"
-            python3 scripts/image_metadata.py repositories \
-              --image-tag "${{ matrix.image_tag }}" \
-              --image-key "${{ matrix.image_key }}" \
-              --repositories "${REPOSITORIES}" \
-              --format newline
+            printf '%s\n' "${RESOLVED_REPOSITORIES}"
+            echo "EOF"
+            echo "non_swr_repositories<<EOF"
+            if [[ "${#non_swr_repositories[@]}" -gt 0 ]]; then
+              printf '%s\n' "${non_swr_repositories[@]}"
+            fi
+            echo "EOF"
+            echo "swr_repositories<<EOF"
+            if [[ "${#swr_repositories[@]}" -gt 0 ]]; then
+              printf '%s\n' "${swr_repositories[@]}"
+            fi
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
 
@@ -217,23 +242,57 @@ jobs:
           done
 
       - name: Build and push by digest
+        if: ${{ steps.repositories.outputs.non_swr_repositories != '' }}
         uses: docker/build-push-action@v7
         id: build
         with:
           platforms: ${{ matrix.platform }}
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
-          tags: ${{ steps.repositories.outputs.repositories }}
+          tags: ${{ steps.repositories.outputs.non_swr_repositories }}
           file: ${{ github.workspace }}/${{ matrix.path }}/Dockerfile
           context: ${{ github.workspace }}/${{ matrix.path }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           provenance: false
 
-      - name: Export digest
+      - name: Export digest from non-SWR push
+        if: ${{ steps.repositories.outputs.non_swr_repositories != '' }}
         run: |
           mkdir -p "${{ runner.temp }}/digests"
           digest="${{ steps.build.outputs.digest }}"
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Build and push Huawei Cloud SWR by digest one by one
+        if: ${{ steps.repositories.outputs.swr_repositories != '' }}
+        env:
+          SWR_REPOSITORIES: ${{ steps.repositories.outputs.swr_repositories }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ runner.temp }}/digests" "${{ runner.temp }}/build-metadata"
+          readarray -t repositories <<< "${SWR_REPOSITORIES}"
+
+          index=0
+          for repository in "${repositories[@]}"; do
+            [[ -z "${repository}" ]] && continue
+            metadata_file="${{ runner.temp }}/build-metadata/swr-${index}.json"
+            docker buildx build \
+              --platform "${{ matrix.platform }}" \
+              --build-arg "BASE_IMAGE=${{ matrix.base_image }}" \
+              --tag "${repository}" \
+              --file "${{ github.workspace }}/${{ matrix.path }}/Dockerfile" \
+              --output "type=image,push-by-digest=true,name-canonical=true,push=true" \
+              --provenance=false \
+              --metadata-file "${metadata_file}" \
+              "${{ github.workspace }}/${{ matrix.path }}"
+
+            digest="$(jq -r '."containerimage.digest"' "${metadata_file}")"
+            if [[ -z "${digest}" || "${digest}" == "null" ]]; then
+              echo "error: buildx did not return a digest for ${repository}" >&2
+              exit 1
+            fi
+            touch "${{ runner.temp }}/digests/${digest#sha256:}"
+            index=$((index + 1))
+          done
 
       - name: Upload digest
         uses: actions/upload-artifact@v7
