@@ -1,9 +1,6 @@
 name: Build Images
 
 on:
-  push:
-    paths:
-      - "images/**"
   pull_request:
     branches:
       - "main"
