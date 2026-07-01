@@ -160,12 +160,16 @@ RUN set -eux; \
         if [[ "${ARCH}" == "x86_64" ]]; then \
             python -m pip install \
                 --index-url "${PYTORCH_CPU_INDEX_URL}" \
-                "torch==${TORCH_VERSION}+cpu torchvision torchaudio"; \
+                "torch==${TORCH_VERSION}+cpu" \
+                torchvision \
+                torchaudio; \
         elif [[ "${ARCH}" == "aarch64" ]]; then \
             python -m pip install \
                 -i "${PYPI_INDEX_URL}" \
                 --trusted-host "${PYPI_TRUSTED_HOST}" \
-                "torch==${TORCH_VERSION} torchvision torchaudio"; \
+                "torch==${TORCH_VERSION}" \
+                torchvision \
+                torchaudio; \
         else \
             echo "Unsupported architecture: ${ARCH}" >&2; \
             exit 1; \
