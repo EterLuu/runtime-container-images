@@ -1,0 +1,49 @@
+{
+  "versions": [
+    {
+      "image_version": "9.0.0",
+      "path": "images/modelarts/cann/9.0.0-910b-ubuntu22.04",
+      "tags": ["9.0.0-910b-ubuntu22.04"],
+      "base_image": "ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11",
+      "cann_version": "9.0.0",
+      "chip": "910b",
+      "derived_chips": ["310p", "910", "950", "a3"],
+      "os": "ubuntu",
+      "os_version": "22.04",
+      "python_version": "3.11",
+      "default_conda_env": "torch-2.9",
+      "arches": [
+        {
+          "platform": "linux/amd64",
+          "runner": "ubuntu-latest",
+          "artifact_arch": "amd64"
+        },
+        {
+          "platform": "linux/arm64",
+          "runner": "ubuntu-22.04-arm",
+          "artifact_arch": "arm64"
+        }
+      ]
+    },
+    {
+      "image_version": "12.6.1",
+      "path": "images/modelarts/cuda/12.6.1-v100-ubuntu24.04",
+      "tags": ["12.6.1-v100-ubuntu24.04"],
+      "base_image": "nvidia/cuda:12.6.1-cudnn-devel-ubuntu24.04",
+      "cuda_version": "12.6.1",
+      "gpu": "v100",
+      "cuda_arch": "sm_70",
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "python_version": "3.11",
+      "default_conda_env": "torch-2.7.1",
+      "arches": [
+        {
+          "platform": "linux/amd64",
+          "runner": "ubuntu-latest",
+          "artifact_arch": "amd64"
+        }
+      ]
+    }
+  ]
+}

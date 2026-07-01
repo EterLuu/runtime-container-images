@@ -1,5 +1,17 @@
-ARG BASE_IMAGE=ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11
+ARG BASE_IMAGE=nvidia/cuda:12.6.1-cudnn-devel-ubuntu24.04
 FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Shanghai
+
+# V100 = Volta = sm_70
+ENV TORCH_CUDA_ARCH_LIST="7.0"
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
 
 USER root
 
@@ -25,49 +37,57 @@ RUN set -eux; \
         sudo \
         ffmpeg \
         curl \
+        wget \
         ca-certificates \
         git \
-        openssh-client \
         vim \
         less \
         bash-completion \
         htop \
         p7zip-full \
         tmux \
-        dumb-init
+        dumb-init \
+        build-essential \
+        ninja-build \
+        pkg-config \
+        cmake \
+        python3-dev; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
 
-# Set the user ma-user whose UID is 1000 and the user group ma-group whose GID is 100
-RUN default_user=$(getent passwd 1000 | awk -F ':' '{print $1}') || echo "uid: 1000 does not exist"; \
-    default_group=$(getent group 100 | awk -F ':' '{print $1}') || echo "gid: 100 does not exist"; \
-    if [ ! -z ${default_user} ] && [ ${default_user} != "ma-user" ]; then \
-    userdel -r ${default_user}; \
+# Create ma-group / ma-user
+RUN set -eux; \
+    existing_user="$(getent passwd 1000 | awk -F ':' '{print $1}' || true)"; \
+    existing_group="$(getent group 100 | awk -F ':' '{print $1}' || true)"; \
+    if [ -n "${existing_user}" ] && [ "${existing_user}" != "ma-user" ]; then \
+        userdel -r "${existing_user}" || true; \
     fi; \
-    if [ ! -z ${default_group} ] && [ ${default_group} != "ma-group" ]; then \
-    groupdel -f ${default_group}; \
+    if [ -n "${existing_group}" ] && [ "${existing_group}" != "ma-group" ]; then \
+        groupmod -n ma-group "${existing_group}"; \
+    elif [ -z "${existing_group}" ]; then \
+        groupadd -g 100 ma-group; \
     fi; \
-    groupadd -g 100 ma-group && useradd -d /home/ma-user -m -u 1000 -g 100 -s /bin/bash ma-user; \
-    # Grant the read, write, and execute permissions on the target directory to the user ma-user.
+    if ! id ma-user >/dev/null 2>&1; then \
+        useradd -d /home/ma-user -m -u 1000 -g 100 -s /bin/bash ma-user; \
+    fi; \
     chmod -R 750 /home/ma-user
 
 # Allow ma-user to use sudo
 RUN set -eux; \
     echo 'ma-user ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ma-user; \
-    chmod 0440 /etc/sudoers.d/ma-user; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
+    chmod 0440 /etc/sudoers.d/ma-user
 
 # Install OpenSSH for ModelArts
 RUN set -eux; \
     ssh -V; \
     mkdir -p /run/sshd; \
-    chmod 0755 /run/sshd; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
+    chmod 0755 /run/sshd
 
 # Install code-server 4.x
 ARG CODE_SERVER_VERSION=4.20.1
 
 RUN set -eux; \
+    apt-get update; \
     ARCH="$(dpkg --print-architecture)"; \
     case "${ARCH}" in \
         amd64) CODE_SERVER_ARCH="amd64" ;; \
@@ -89,7 +109,7 @@ COPY --chmod=755 scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.s
 
 ENV MY_SSHD_PORT=38888
 
-# Switch to user ma-user, download miniconda from the Tsinghua repository, and install miniconda in /home/ma-user.
+# Switch to ma-user and install Miniconda
 USER ma-user
 
 RUN set -eux; \
@@ -107,7 +127,7 @@ RUN set -eux; \
 
 ENV PATH=/home/ma-user/miniconda/bin:${PATH}
 
-# Configure the conda and pip sources
+# Configure conda and pip sources
 RUN set -eux; \
     mkdir -p /home/ma-user/.pip; \
     printf '%s\n' \
@@ -125,98 +145,84 @@ RUN set -eux; \
     printf '%s\n' \
       '[global]' \
       'index-url = https://mirrors.huaweicloud.com/repository/pypi/simple' \
+      'extra-index-url = https://download.pytorch.org/whl/cu126' \
       'trusted-host = mirrors.huaweicloud.com' \
       'timeout = 120' \
       > /home/ma-user/.pip/pip.conf
 
-# Create Ascend NPU compatible conda environments.
+# Create CUDA/PyTorch environment for V100
 # The ipykernel package is mandatory for starting a kernel.
 SHELL ["/bin/bash", "-lc"]
 
 ARG PYPI_INDEX_URL=https://mirrors.huaweicloud.com/repository/pypi/simple
 ARG PYPI_TRUSTED_HOST=mirrors.huaweicloud.com
-ARG PYTORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
+ARG PYTORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu126
+
+# Can be overwritted：
+# docker build --build-arg TORCH_VERSION=2.7.1 ...
+ARG TORCH_VERSION=2.7.1
+ARG TORCHVISION_VERSION=0.22.1
+ARG TORCHAUDIO_VERSION=2.7.1
+ARG PYTHON_VERSION=3.11
 
 RUN set -eux; \
     source /home/ma-user/miniconda/etc/profile.d/conda.sh; \
-    printf '%s\n' 'numpy<2.0' > /tmp/pip-constraints.txt; \
-    export PIP_CONSTRAINT=/tmp/pip-constraints.txt; \
     \
-    create_npu_env() { \
-        local ENV_NAME="$1"; \
-        local TORCH_VERSION="$2"; \
-        local TORCH_NPU_VERSION="$3"; \
-        \
-        conda create -y --name "${ENV_NAME}" python=3.11 pip "numpy<2.0"; \
-        conda activate "${ENV_NAME}"; \
-        \
-        python -m pip install --upgrade pip wheel setuptools pyyaml; \
-        \
-        ARCH="$(uname -m)"; \
-        if [[ "${ARCH}" == "x86_64" ]]; then \
-            python -m pip install \
-                --index-url "${PYTORCH_CPU_INDEX_URL}" \
-                "torch==${TORCH_VERSION}+cpu"; \
-        elif [[ "${ARCH}" == "aarch64" ]]; then \
-            python -m pip install \
-                -i "${PYPI_INDEX_URL}" \
-                --trusted-host "${PYPI_TRUSTED_HOST}" \
-                "torch==${TORCH_VERSION}"; \
-        else \
-            echo "Unsupported architecture: ${ARCH}" >&2; \
-            exit 1; \
-        fi; \
-        \
-        python -m pip install \
-            -i "${PYPI_INDEX_URL}" \
-            --trusted-host "${PYPI_TRUSTED_HOST}" \
-            "numpy<2.0" \
-            "torch-npu==${TORCH_NPU_VERSION}"; \
-        \
-        DS_BUILD_OPS=0 python -m pip install \
-            -i "${PYPI_INDEX_URL}" \
-            --trusted-host "${PYPI_TRUSTED_HOST}" \
-            "numpy<2.0" \
-            "ipykernel>=6.29,<7" \
-            transformers \
-            accelerate \
-            deepspeed \
-            librosa \
-            tqdm \
-            datasets \
-            sentencepiece \
-            safetensors \
-            tokenizers \
-            peft \
-            einops \
-            scipy \
-            scikit-learn \
-            pandas \
-            matplotlib \
-            pillow \
-            psutil; \
-        \
-        python -m ipykernel install \
-            --user \
-            --name "${ENV_NAME}" \
-            --display-name "${ENV_NAME}"; \
-        \
-        conda deactivate; \
-    }; \
+    conda create -y --name torch-2.7.1 python=${PYTHON_VERSION} pip "numpy<2.0"; \
+    conda activate torch-2.7.1; \
     \
-    create_npu_env torch_2.10 2.10.0 2.10.0; \
-    create_npu_env torch_2.9  2.9.0  2.9.0.post2; \
-    create_npu_env torch_2.8  2.8.0  2.8.0.post4; \
-    create_npu_env torch_2.7.1  2.7.1  2.7.1.post4; \
+    python -m pip install --upgrade pip wheel setuptools pyyaml packaging; \
     \
+    python -m pip install --no-cache-dir \
+        --index-url "${PYTORCH_CUDA_INDEX_URL}" \
+        "torch==${TORCH_VERSION}" \
+        "torchvision==${TORCHVISION_VERSION}" \
+        "torchaudio==${TORCHAUDIO_VERSION}"; \
+    \
+    DS_BUILD_OPS=0 python -m pip install --no-cache-dir \
+        -i "${PYPI_INDEX_URL}" \
+        --trusted-host "${PYPI_TRUSTED_HOST}" \
+        "numpy<2.0" \
+        "ipykernel>=6.29,<7" \
+        transformers \
+        accelerate \
+        deepspeed \
+        librosa \
+        tqdm \
+        datasets \
+        sentencepiece \
+        safetensors \
+        tokenizers \
+        peft \
+        einops \
+        scipy \
+        scikit-learn \
+        pandas \
+        matplotlib \
+        pillow \
+        psutil; \
+    \
+    python -m ipykernel install \
+        --user \
+        --name torch-2.7.1 \
+        --display-name "torch-2.7.1"; \
+    \
+    python - <<'PY' \
+import torch; \
+print("torch:", torch.__version__); \
+print("torch cuda:", torch.version.cuda); \
+print("cuda available during build:", torch.cuda.is_available()); \
+PY \
+    ; \
+    conda deactivate; \
     conda clean -afy; \
-    rm -rf /home/ma-user/.cache/pip /tmp/pip-constraints.txt; \
+    rm -rf /home/ma-user/.cache/pip; \
     \
     echo 'source /home/ma-user/miniconda/etc/profile.d/conda.sh' >> /home/ma-user/.bashrc; \
-    echo 'conda activate torch_2.9' >> /home/ma-user/.bashrc
+    echo 'conda activate torch-2.7.1' >> /home/ma-user/.bashrc
 
-ENV CONDA_DEFAULT_ENV=torch_2.9
-ENV PATH=/home/ma-user/miniconda/envs/torch_2.9/bin:/home/ma-user/miniconda/bin:${PATH}
+ENV CONDA_DEFAULT_ENV=torch-2.7.1
+ENV PATH=/home/ma-user/miniconda/envs/torch-2.7.1/bin:/home/ma-user/miniconda/bin:${PATH}
 
 USER ma-user
 WORKDIR /home/ma-user

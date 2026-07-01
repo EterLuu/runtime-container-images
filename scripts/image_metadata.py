@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Helpers for ModelArts image metadata used by local scripts and CI."""
+"""Helpers for runtime image metadata used by local scripts and CI."""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ import re
 import sys
 from pathlib import Path
 
-DEFAULT_METADATA = "modelarts_publish_version.json"
+DEFAULT_METADATA = "image_publish_version.json"
+IMAGES_DIR = "images"
+KNOWN_CHIPS = ("910b", "310p", "910", "950", "a3")
 DEFAULT_ARCHES = [
     {
         "platform": "linux/amd64",
@@ -21,6 +23,13 @@ DEFAULT_ARCHES = [
         "platform": "linux/arm64",
         "runner": "ubuntu-22.04-arm",
         "artifact_arch": "arm64",
+    },
+]
+CUDA_DEFAULT_ARCHES = [
+    {
+        "platform": "linux/amd64",
+        "runner": "ubuntu-latest",
+        "artifact_arch": "amd64",
     },
 ]
 TAG_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
@@ -49,6 +58,125 @@ def load_metadata(metadata_path: str) -> dict:
     if not isinstance(data, dict) or not isinstance(data.get("versions"), list):
         raise MetadataError("metadata must contain a top-level 'versions' array")
     return data
+
+
+def extract_base_image(dockerfile: Path) -> str:
+    base_image_arg = ""
+    from_image = ""
+    for raw_line in dockerfile.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line.startswith("ARG BASE_IMAGE="):
+            base_image_arg = line.split("=", 1)[1].strip()
+        elif line.startswith("FROM ") and "${BASE_IMAGE}" not in line:
+            from_image = line.split(None, 1)[1].strip()
+    return base_image_arg or from_image
+
+
+def infer_chip(tag: str) -> str:
+    for chip in KNOWN_CHIPS:
+        if f"-{chip}-" in tag:
+            return chip
+    return ""
+
+
+def infer_version(tag: str, chip: str) -> str:
+    if chip and f"-{chip}-" in tag:
+        return tag.split(f"-{chip}-", 1)[0]
+    return tag.split("-", 1)[0]
+
+
+def repository_suffix(entry: dict) -> str:
+    image_platform = entry.get("image_platform")
+    image_flavor = entry.get("image_flavor")
+    if not image_platform or not image_flavor:
+        return "runtime-image"
+    return f"{image_platform}-{image_flavor}"
+
+
+def entry_version(entry: dict) -> str:
+    return entry.get("image_version") or ""
+
+
+def default_arches_for(image_flavor: str) -> list[dict]:
+    if image_flavor == "cuda":
+        return CUDA_DEFAULT_ARCHES
+    return DEFAULT_ARCHES
+
+
+def entry_image_key(entry: dict) -> str:
+    return entry.get("image_key") or entry.get("path", "")
+
+
+def artifact_key(entry: dict) -> str:
+    value = entry_image_key(entry) or entry["tags"][0]
+    value = value.removeprefix(f"{IMAGES_DIR}/")
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
+
+
+def discover_entries(data: dict, root: Path) -> list[dict]:
+    configs = data["versions"]
+    by_path = {}
+    by_tag = {}
+    for config in configs:
+        if not isinstance(config, dict):
+            continue
+        if isinstance(config.get("path"), str):
+            by_path[config["path"]] = config
+        for tag in config.get("tags", []):
+            if isinstance(tag, str):
+                by_tag[tag] = config
+
+    entries = []
+    images_root = root / IMAGES_DIR
+    for dockerfile in sorted(images_root.glob("*/*/*/Dockerfile")):
+        image_dir = dockerfile.parent
+        rel_path = image_dir.relative_to(root).as_posix()
+        parts = image_dir.relative_to(images_root).parts
+        if len(parts) != 3:
+            continue
+
+        image_platform, image_flavor, tag = parts
+        config = by_path.get(rel_path, by_tag.get(tag, {}))
+        entry = copy.deepcopy(config)
+        chip = entry.get("chip") or infer_chip(tag)
+
+        entry.update(
+            {
+                "path": rel_path,
+                "image_key": entry.get("image_key", rel_path),
+                "image_platform": entry.get("image_platform", image_platform),
+                "image_flavor": entry.get("image_flavor", image_flavor),
+                "tags": entry.get("tags", [tag]),
+                "base_image": entry.get("base_image") or extract_base_image(dockerfile),
+                "chip": chip,
+                "image_version": entry_version(entry) or infer_version(tag, chip),
+                "arches": entry.get("arches") or default_arches_for(image_flavor),
+            }
+        )
+        entry["repository_suffix"] = entry.get(
+            "repository_suffix"
+        ) or repository_suffix(entry)
+        entries.append(entry)
+
+    configured_paths = {entry["path"] for entry in entries}
+    for config in configs:
+        if not isinstance(config, dict):
+            continue
+        path = config.get("path")
+        if not isinstance(path, str) or path in configured_paths:
+            continue
+        if (root / path / "Dockerfile").is_file():
+            entry = copy.deepcopy(config)
+            parts = Path(path).parts
+            if len(parts) >= 4 and parts[0] == IMAGES_DIR:
+                entry.setdefault("image_platform", parts[1])
+                entry.setdefault("image_flavor", parts[2])
+            entry.setdefault("image_key", path)
+            entry.setdefault("image_version", entry_version(entry))
+            entry.setdefault("repository_suffix", repository_suffix(entry))
+            entries.append(entry)
+
+    return entries
 
 
 def entry_arches(entry: dict) -> list[dict]:
@@ -117,7 +245,7 @@ def replace_chip(value: str, source_chip: str, target_chip: str, field: str) -> 
 def expand_entry(entry: dict) -> list[dict]:
     source_chip = entry.get("chip")
     if not isinstance(source_chip, str) or not source_chip:
-        raise MetadataError(f"{entry.get('path', '<unknown>')}: chip is required")
+        return [copy.deepcopy(entry)]
 
     derived_chips = entry.get("derived_chips", [])
     if derived_chips is None:
@@ -150,7 +278,7 @@ def expand_entry(entry: dict) -> list[dict]:
 
 
 def validate_entries(data: dict, root: Path, expand: bool = True) -> list[dict]:
-    raw_entries = data["versions"]
+    raw_entries = discover_entries(data, root)
     entries = []
 
     for index, entry in enumerate(raw_entries):
@@ -160,8 +288,8 @@ def validate_entries(data: dict, root: Path, expand: bool = True) -> list[dict]:
         path = entry.get("path")
         if not isinstance(path, str) or not path:
             raise MetadataError(f"versions[{index}].path is required")
-        if not path.startswith("modelarts/"):
-            raise MetadataError(f"{path}: path must start with 'modelarts/'")
+        if not path.startswith(f"{IMAGES_DIR}/"):
+            raise MetadataError(f"{path}: path must start with '{IMAGES_DIR}/'")
 
         image_dir = root / path
         dockerfile = image_dir / "Dockerfile"
@@ -175,11 +303,10 @@ def validate_entries(data: dict, root: Path, expand: bool = True) -> list[dict]:
             if not isinstance(tag, str) or not TAG_RE.match(tag):
                 raise MetadataError(f"{path}: invalid image tag '{tag}'")
 
-        modelarts_version = entry.get("modelarts_version")
-        if not isinstance(modelarts_version, str) or not modelarts_version:
-            raise MetadataError(
-                f"{path}: modelarts_version is required for batch release"
-            )
+        image_version = entry_version(entry)
+        if not isinstance(image_version, str) or not image_version:
+            raise MetadataError(f"{path}: image_version is required for batch release")
+        entry["image_version"] = image_version
 
         base_image = entry.get("base_image")
         if not isinstance(base_image, str) or not base_image:
@@ -193,17 +320,20 @@ def validate_entries(data: dict, root: Path, expand: bool = True) -> list[dict]:
             raw_entry.pop("derived_chips", None)
             entries.append(raw_entry)
 
-    seen_tags: dict[str, str] = {}
+    seen_tags: dict[tuple[str, str], str] = {}
     for entry in entries:
         path = entry["path"]
+        suffix = repository_suffix(entry)
         for tag in entry["tags"]:
             if not isinstance(tag, str) or not TAG_RE.match(tag):
                 raise MetadataError(f"{path}: invalid derived image tag '{tag}'")
-            if tag in seen_tags:
+            key = (suffix, tag)
+            if key in seen_tags:
                 raise MetadataError(
-                    f"{path}: tag '{tag}' already used by {seen_tags[tag]}"
+                    f"{path}: tag '{tag}' already used by {seen_tags[key]} "
+                    f"for repository suffix '{suffix}'"
                 )
-            seen_tags[tag] = path
+            seen_tags[key] = path
     return entries
 
 
@@ -212,12 +342,31 @@ def metadata_entries(metadata_path: str, expand: bool = True) -> list[dict]:
     return validate_entries(data, repo_root(), expand=expand)
 
 
-def select_entry(entries: list[dict], tag: str) -> dict:
-    for entry in entries:
-        if tag in entry["tags"]:
-            return entry
+def select_entry(entries: list[dict], tag: str, image_key: str = "") -> dict:
+    if image_key:
+        key_matches = [
+            entry
+            for entry in entries
+            if image_key in (entry_image_key(entry), entry["path"])
+        ]
+        if not key_matches:
+            raise MetadataError(f"unknown image key '{image_key}'")
+        for entry in key_matches:
+            if tag in entry["tags"]:
+                return entry
+        raise MetadataError(f"{image_key}: tag '{tag}' is not defined for this image")
+
+    matches = [entry for entry in entries if tag in entry["tags"]]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        available = ", ".join(entry_image_key(entry) for entry in matches)
+        raise MetadataError(
+            f"image tag '{tag}' is ambiguous. Specify --image-key. "
+            f"Matching image keys: {available}"
+        )
     available = ", ".join(entry["tags"][0] for entry in entries)
-    raise MetadataError(f"unknown ModelArts tag '{tag}'. Available tags: {available}")
+    raise MetadataError(f"unknown image tag '{tag}'. Available tags: {available}")
 
 
 def parse_repositories(value: str) -> list[str]:
@@ -234,13 +383,38 @@ def parse_repositories(value: str) -> list[str]:
     return repositories
 
 
+def categorized_repositories(repositories: list[str], entry: dict) -> list[str]:
+    suffix = repository_suffix(entry).lower()
+    image_platform = entry.get("image_platform", "").lower()
+    result = []
+    for repository in repositories:
+        parts = repository.rsplit("/", 1)
+        if len(parts) == 1:
+            if repository == suffix:
+                result.append(repository)
+            elif image_platform and repository.startswith(f"{image_platform}-"):
+                result.append(suffix)
+            else:
+                result.append(f"{repository}/{suffix}")
+            continue
+
+        namespace, name = parts
+        if name == suffix:
+            result.append(repository)
+        elif image_platform and name.startswith(f"{image_platform}-"):
+            result.append(f"{namespace}/{suffix}")
+        else:
+            result.append(f"{repository}/{suffix}")
+    return unique_list(result)
+
+
 def print_json(value: object) -> None:
     print(json.dumps(value, separators=(",", ":")))
 
 
 def command_validate(args: argparse.Namespace) -> None:
     entries = metadata_entries(args.metadata)
-    print(f"Validated {len(entries)} ModelArts image definition(s).")
+    print(f"Validated {len(entries)} Image definition(s).")
 
 
 def command_build_matrix(args: argparse.Namespace) -> None:
@@ -249,7 +423,9 @@ def command_build_matrix(args: argparse.Namespace) -> None:
         for arch in entry["arches"]:
             include.append(
                 {
-                    "modelarts_tag": entry["tags"][0],
+                    "image_tag": entry["tags"][0],
+                    "image_key": entry_image_key(entry),
+                    "repository_suffix": repository_suffix(entry),
                     "path": entry["path"],
                     "base_image": entry["base_image"],
                     "platform": arch["platform"],
@@ -261,12 +437,17 @@ def command_build_matrix(args: argparse.Namespace) -> None:
 
 
 def command_publish_matrix(args: argparse.Namespace) -> None:
-    entry = select_entry(metadata_entries(args.metadata), args.modelarts_tag)
+    entry = select_entry(
+        metadata_entries(args.metadata), args.image_tag, args.image_key
+    )
     include = []
     for arch in entry["arches"]:
         include.append(
             {
-                "modelarts_tag": entry["tags"][0],
+                "image_tag": entry["tags"][0],
+                "image_key": entry_image_key(entry),
+                "artifact_key": artifact_key(entry),
+                "repository_suffix": repository_suffix(entry),
                 "path": entry["path"],
                 "base_image": entry["base_image"],
                 "platform": arch["platform"],
@@ -279,19 +460,26 @@ def command_publish_matrix(args: argparse.Namespace) -> None:
 
 def command_batch_matrix(args: argparse.Namespace) -> None:
     include = [
-        {"modelarts_tag": entry["tags"][0]}
+        {
+            "image_tag": entry["tags"][0],
+            "image_key": entry_image_key(entry),
+            "repository_suffix": repository_suffix(entry),
+        }
         for entry in metadata_entries(args.metadata)
-        if entry["modelarts_version"] == args.modelarts_version
+        if entry["image_version"] == args.image_version
     ]
     if not include:
-        raise MetadataError(
-            f"no ModelArts image matches version '{args.modelarts_version}'"
-        )
+        raise MetadataError(f"no image matches version '{args.image_version}'")
     print_json({"include": include})
 
 
 def command_repositories(args: argparse.Namespace) -> None:
     repositories = parse_repositories(args.repositories)
+    if args.image_tag:
+        entry = select_entry(
+            metadata_entries(args.metadata), args.image_tag, args.image_key
+        )
+        repositories = categorized_repositories(repositories, entry)
     if args.format == "json":
         print_json(repositories)
     else:
@@ -299,8 +487,12 @@ def command_repositories(args: argparse.Namespace) -> None:
 
 
 def command_tags(args: argparse.Namespace) -> None:
-    entry = select_entry(metadata_entries(args.metadata), args.modelarts_tag)
-    repositories = parse_repositories(args.repositories)
+    entry = select_entry(
+        metadata_entries(args.metadata), args.image_tag, args.image_key
+    )
+    repositories = categorized_repositories(
+        parse_repositories(args.repositories), entry
+    )
     tags = [
         f"{repository}:{tag}" for repository in repositories for tag in entry["tags"]
     ]
@@ -311,13 +503,24 @@ def command_tags(args: argparse.Namespace) -> None:
 
 
 def command_path(args: argparse.Namespace) -> None:
-    entry = select_entry(metadata_entries(args.metadata), args.modelarts_tag)
+    entry = select_entry(
+        metadata_entries(args.metadata), args.image_tag, args.image_key
+    )
     print(entry["path"])
 
 
 def command_base_image(args: argparse.Namespace) -> None:
-    entry = select_entry(metadata_entries(args.metadata), args.modelarts_tag)
+    entry = select_entry(
+        metadata_entries(args.metadata), args.image_tag, args.image_key
+    )
     print(entry["base_image"])
+
+
+def command_artifact_key(args: argparse.Namespace) -> None:
+    entry = select_entry(
+        metadata_entries(args.metadata), args.image_tag, args.image_key
+    )
+    print(artifact_key(entry))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -340,37 +543,50 @@ def build_parser() -> argparse.ArgumentParser:
     publish_matrix = subparsers.add_parser(
         "publish-matrix", help="print CI matrix for one tag"
     )
-    publish_matrix.add_argument("--modelarts-tag", required=True)
+    publish_matrix.add_argument("--image-tag", required=True)
+    publish_matrix.add_argument("--image-key", default="")
     publish_matrix.set_defaults(func=command_publish_matrix)
 
     batch_matrix = subparsers.add_parser(
         "batch-matrix", help="print reusable workflow matrix for a version"
     )
-    batch_matrix.add_argument("--modelarts-version", required=True)
+    batch_matrix.add_argument("--image-version", required=True)
     batch_matrix.set_defaults(func=command_batch_matrix)
 
     repositories = subparsers.add_parser(
         "repositories", help="normalize image repository list"
     )
     repositories.add_argument("--repositories", required=True)
+    repositories.add_argument("--image-tag")
+    repositories.add_argument("--image-key", default="")
     repositories.add_argument("--format", choices=("json", "newline"), default="json")
     repositories.set_defaults(func=command_repositories)
 
     tags = subparsers.add_parser(
         "tags", help="expand repositories and metadata aliases into full tags"
     )
-    tags.add_argument("--modelarts-tag", required=True)
+    tags.add_argument("--image-tag", required=True)
+    tags.add_argument("--image-key", default="")
     tags.add_argument("--repositories", required=True)
     tags.add_argument("--format", choices=("json", "newline"), default="json")
     tags.set_defaults(func=command_tags)
 
     path = subparsers.add_parser("path", help="print Dockerfile context path for a tag")
-    path.add_argument("--modelarts-tag", required=True)
+    path.add_argument("--image-tag", required=True)
+    path.add_argument("--image-key", default="")
     path.set_defaults(func=command_path)
 
     base_image = subparsers.add_parser("base-image", help="print base image for a tag")
-    base_image.add_argument("--modelarts-tag", required=True)
+    base_image.add_argument("--image-tag", required=True)
+    base_image.add_argument("--image-key", default="")
     base_image.set_defaults(func=command_base_image)
+
+    artifact_key_parser = subparsers.add_parser(
+        "artifact-key", help="print the digest artifact key for a tag"
+    )
+    artifact_key_parser.add_argument("--image-tag", required=True)
+    artifact_key_parser.add_argument("--image-key", default="")
+    artifact_key_parser.set_defaults(func=command_artifact_key)
 
     return parser
 

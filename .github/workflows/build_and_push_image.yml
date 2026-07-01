@@ -1,33 +1,42 @@
-name: Build and Publish ModelArts Image
+name: Build and Publish Image
 
 on:
   workflow_call:
     inputs:
-      modelarts_tag:
-        description: "ModelArts image tag defined in modelarts_publish_version.json"
+      image_tag:
+        description: "Image tag defined in image_publish_version.json"
         required: true
+        type: string
+      image_key:
+        description: "Optional image key/path under images/ used to disambiguate duplicate tags"
+        default: ""
         type: string
       publish:
         description: "Push the image to registries"
         default: false
         type: boolean
       image_repositories:
-        description: "Optional override. Blank uses IMAGE_REPOSITORIES, then defaults to ghcr.io/<owner>/modelarts-cann."
+        description: "Optional override. Blank uses IMAGE_REPOSITORIES, then defaults to ghcr.io/<owner>/<platform>-<runtime>."
         default: ""
         type: string
   workflow_dispatch:
     inputs:
-      modelarts_tag:
-        description: "ModelArts image tag defined in modelarts_publish_version.json"
+      image_tag:
+        description: "Image tag defined in image_publish_version.json"
         required: true
         default: "9.0.0-910b-ubuntu22.04"
+        type: string
+      image_key:
+        description: "Optional image key/path under images/ used to disambiguate duplicate tags"
+        required: false
+        default: ""
         type: string
       publish:
         description: "Push the image to registries"
         default: false
         type: boolean
       image_repositories:
-        description: "Optional override. Blank uses IMAGE_REPOSITORIES, then defaults to ghcr.io/<owner>/modelarts-cann."
+        description: "Optional override. Blank uses IMAGE_REPOSITORIES, then defaults to ghcr.io/<owner>/<platform>-<runtime>."
         required: false
         default: ""
         type: string
@@ -44,21 +53,32 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      artifact_key: ${{ steps.artifact.outputs.artifact_key }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Validate metadata
-        run: python3 scripts/modelarts_metadata.py validate
+        run: python3 scripts/image_metadata.py validate
 
       - name: Get publish matrix
         id: matrix
         run: |
-          MATRIX="$(python3 scripts/modelarts_metadata.py publish-matrix --modelarts-tag "${{ inputs.modelarts_tag }}")"
+          MATRIX="$(python3 scripts/image_metadata.py publish-matrix \
+            --image-tag "${{ inputs.image_tag }}" \
+            --image-key "${{ inputs.image_key }}")"
           echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
 
+      - name: Get artifact key
+        id: artifact
+        run: |
+          ARTIFACT_KEY="$(python3 scripts/image_metadata.py artifact-key \
+            --image-tag "${{ inputs.image_tag }}" \
+            --image-key "${{ inputs.image_key }}")"
+          echo "artifact_key=${ARTIFACT_KEY}" >> "${GITHUB_OUTPUT}"
+
   only-build:
-    name: build ${{ inputs.modelarts_tag }} (${{ matrix.platform }})
+    name: build ${{ inputs.image_tag }} (${{ matrix.platform }})
     if: ${{ !inputs.publish }}
     needs: prepare
     runs-on: ${{ matrix.runner }}
@@ -79,7 +99,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Prepare build context
-        run: scripts/prepare_modelarts_context.sh "${{ matrix.path }}"
+        run: scripts/prepare_image_context.sh "${{ matrix.path }}"
 
       - name: Build image
         uses: docker/build-push-action@v7
@@ -93,7 +113,7 @@ jobs:
           provenance: false
 
   build-push-digest:
-    name: build ${{ inputs.modelarts_tag }} (${{ matrix.platform }})
+    name: build ${{ inputs.image_tag }} (${{ matrix.platform }})
     if: ${{ inputs.publish }}
     needs: prepare
     runs-on: ${{ matrix.runner }}
@@ -101,7 +121,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
-      DEFAULT_IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/modelarts-cann
+      DEFAULT_IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}
       INPUT_IMAGE_REPOSITORIES: ${{ inputs.image_repositories }}
     steps:
       - name: Checkout
@@ -117,7 +137,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Prepare build context
-        run: scripts/prepare_modelarts_context.sh "${{ matrix.path }}"
+        run: scripts/prepare_image_context.sh "${{ matrix.path }}"
 
       - name: Resolve repositories
         id: repositories
@@ -125,7 +145,9 @@ jobs:
           REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}}"
           {
             echo "repositories<<EOF"
-            python3 scripts/modelarts_metadata.py repositories \
+            python3 scripts/image_metadata.py repositories \
+              --image-tag "${{ matrix.image_tag }}" \
+              --image-key "${{ matrix.image_key }}" \
               --repositories "${REPOSITORIES}" \
               --format newline
             echo "EOF"
@@ -216,17 +238,19 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v7
         with:
-          name: digests-${{ inputs.modelarts_tag }}-${{ matrix.artifact_arch }}
+          name: digests-${{ matrix.artifact_key }}-${{ matrix.artifact_arch }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
 
   push-image:
     if: ${{ inputs.publish }}
-    needs: build-push-digest
+    needs:
+      - prepare
+      - build-push-digest
     runs-on: ubuntu-latest
     env:
-      DEFAULT_IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/modelarts-cann
+      DEFAULT_IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}
       INPUT_IMAGE_REPOSITORIES: ${{ inputs.image_repositories }}
     steps:
       - name: Checkout
@@ -236,7 +260,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
-          pattern: digests-${{ inputs.modelarts_tag }}-*
+          pattern: digests-${{ needs.prepare.outputs.artifact_key }}-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
@@ -248,7 +272,9 @@ jobs:
           REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}}"
           {
             echo "repositories<<EOF"
-            python3 scripts/modelarts_metadata.py repositories \
+            python3 scripts/image_metadata.py repositories \
+              --image-tag "${{ inputs.image_tag }}" \
+              --image-key "${{ inputs.image_key }}" \
               --repositories "${REPOSITORIES}" \
               --format newline
             echo "EOF"
@@ -321,8 +347,9 @@ jobs:
         id: tags
         run: |
           REPOSITORIES="${INPUT_IMAGE_REPOSITORIES:-${IMAGE_REPOSITORIES:-${DEFAULT_IMAGE_REPOSITORY}}}"
-          TAGS="$(python3 scripts/modelarts_metadata.py tags \
-            --modelarts-tag "${{ inputs.modelarts_tag }}" \
+          TAGS="$(python3 scripts/image_metadata.py tags \
+            --image-tag "${{ inputs.image_tag }}" \
+            --image-key "${{ inputs.image_key }}" \
             --repositories "${REPOSITORIES}")"
           echo "tags=${TAGS}" >> "${GITHUB_OUTPUT}"
 

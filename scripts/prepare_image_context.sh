@@ -3,9 +3,9 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-Usage: scripts/prepare_modelarts_context.sh <modelarts-context> [<modelarts-context>...]
+Usage: scripts/prepare_image_context.sh <image-context> [<image-context>...]
 
-Copy shared ModelArts runtime scripts into each Docker build context.
+Copy shared runtime scripts from the image flavor directory into each Docker build context.
 EOF
 }
 
@@ -16,13 +16,6 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-SOURCE_DIR="${REPO_ROOT}/modelarts/scripts"
-
-if [[ ! -d "${SOURCE_DIR}" ]]; then
-  echo "error: shared ModelArts scripts directory not found: ${SOURCE_DIR}" >&2
-  exit 1
-fi
-
 for context in "$@"; do
   CONTEXT_DIR="${context}"
   if [[ "${CONTEXT_DIR}" != /* ]]; then
@@ -30,8 +23,13 @@ for context in "$@"; do
   fi
 
   if [[ ! -d "${CONTEXT_DIR}" ]]; then
-    echo "error: ModelArts context directory not found: ${CONTEXT_DIR}" >&2
+    echo "error: image context directory not found: ${CONTEXT_DIR}" >&2
     exit 1
+  fi
+
+  SOURCE_DIR="$(dirname "${CONTEXT_DIR}")/scripts"
+  if [[ ! -d "${SOURCE_DIR}" ]]; then
+    continue
   fi
 
   TARGET_DIR="${CONTEXT_DIR}/scripts"

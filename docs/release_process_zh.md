@@ -1,23 +1,25 @@
-# ModelArts 镜像发布流程
+# 运行环境镜像发布流程
 
-本文档说明如何维护和发布 `modelarts/*` 下的 ModelArts 适配镜像。整体流程参考 `cann-container-image`：先在 PR 中完成构建验证，合并后通过手动 workflow 发布镜像。
+本文档说明如何维护和发布 `images/<platform>/<runtime>/*` 下的运行环境镜像。流程是：PR 中完成构建验证，合并后通过手动 workflow 发布镜像。
 
-## 1. 版本和标签规范
+目录前两级会用于发布分类：`images/modelarts/cann/...` 发布到 `modelarts-cann`，`images/modelarts/cuda/...` 发布到 `modelarts-cuda`。
 
-推荐标签格式：
+## 1. 目录和标签
 
-```text
-<cann-version>-<chip>-<os><os-version>
-```
-
-当前模板示例：
+推荐目录格式：
 
 ```text
-9.0.0-910b-ubuntu22.04
+images/<platform>/<runtime>/<tag>/Dockerfile
 ```
 
-该标签表示镜像基于 `ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11`，适配 Ascend 910B，操作系统为 Ubuntu 22.04。
-当前模板会自动衍生以下 tag：
+当前示例：
+
+```text
+images/modelarts/cann/9.0.0-910b-ubuntu22.04/Dockerfile
+images/modelarts/cuda/12.6.1-v100-ubuntu24.04/Dockerfile
+```
+
+CANN 模板可以通过 `chip` 和 `derived_chips` 自动衍生 tag：
 
 ```text
 9.0.0-310p-ubuntu22.04
@@ -26,84 +28,78 @@
 9.0.0-a3-ubuntu22.04
 ```
 
-衍生过程只替换 Dockerfile 顶层 `BASE_IMAGE`，例如把 `ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11` 替换为 `ascendai/cann:9.0.0-310p-ubuntu22.04-py3.11`。
-构建前会自动把 `modelarts/scripts` 复制到目标构建目录的 `scripts/` 下，供 Dockerfile 中的 `COPY scripts/...` 使用。
+衍生过程只替换 Dockerfile 顶层 `BASE_IMAGE`。没有 `chip` 的镜像不会做芯片衍生，直接按目录 tag 构建。
+
+构建前会自动把同类型目录下的 `scripts/` 复制到目标构建目录的 `scripts/` 下，例如 `images/modelarts/cuda/scripts` 会复制到 `images/modelarts/cuda/<tag>/scripts`。
 
 ## 2. 新增或更新镜像
 
-1. 在 `modelarts/<tag>/Dockerfile` 新增或修改 Dockerfile。
-2. 更新 `modelarts_publish_version.json`：
+1. 在 `images/<platform>/<runtime>/<tag>/Dockerfile` 新增或修改 Dockerfile。
+2. 可选更新 `image_publish_version.json`：
    - `path` 指向 Dockerfile 所在目录。
    - `tags` 写入要发布的 tag 列表。
-   - `chip` 写模板芯片，例如 `910b`。
-   - `derived_chips` 写可由模板衍生的芯片，例如 `["310p", "910", "950", "a3"]`。
+   - `image_version` 用于批量发布筛选。
+   - `chip` 和 `derived_chips` 用于 CANN 这类可替换芯片字段的模板。
    - `base_image` 写模板基础镜像，衍生芯片会自动替换其中的芯片字段。
-   - `modelarts_version` 用于批量发布筛选。
    - `arches` 定义目标平台和 GitHub Actions runner。
-3. 如果需要更新容器启动或 SSH 逻辑，修改 `modelarts/scripts`，不要提交生成到 `modelarts/<tag>/scripts` 下的副本。
+3. 如果需要更新容器启动或 SSH 逻辑，修改同类型目录下的 `scripts`，不要提交生成到 `images/<platform>/<runtime>/<tag>/scripts` 下的副本。
 4. 本地执行校验：
 
 ```bash
-python3 scripts/modelarts_metadata.py validate
+python3 scripts/image_metadata.py validate
 ```
 
 5. 可选，本地构建验证：
 
 ```bash
-IMAGE_REPOSITORY=modelarts-cann \
-  scripts/build_modelarts.sh 9.0.0-310p-ubuntu22.04
+IMAGE_REPOSITORY=modelarts-cuda \
+  scripts/build_image.sh 12.6.1-v100-ubuntu24.04
 ```
 
 ## 3. PR 构建验证
 
-提交 PR 后，`Build ModelArts Image` 会自动运行：
+提交 PR 后，`Build Images` 会自动运行：
 
-- 校验 `modelarts_publish_version.json`。
-- 只为实际存在的 `modelarts/<tag>` 目录和目标平台生成 matrix，不展开 `derived_chips`。
+- 校验 `image_publish_version.json` 和实际 Dockerfile 目录。
+- 只为实际存在的 `images/<platform>/<runtime>/<tag>` 目录和目标平台生成 matrix，不展开 `derived_chips`。
 - 使用 `docker/build-push-action` 构建镜像，但不推送。
 
-如果没有可用的 ARM runner，可以临时在 `modelarts_publish_version.json` 中移除 `linux/arm64` 对应的 `arches` 项，或将 `runner` 改为仓库可用的自托管 runner。
+CUDA 样例没有显式配置 `arches` 时默认只构建 `linux/amd64`。其它运行环境默认使用 `linux/amd64` 和 `linux/arm64`，也可以在 `image_publish_version.json` 中覆盖。
 
 ## 4. 发布单个镜像
 
-在 GitHub Actions 页面手动运行 `Build and Publish ModelArts Image`：
+在 GitHub Actions 页面手动运行 `Build and Publish Image`：
 
-| 参数                 | 说明                                                                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------ |
-| `modelarts_tag`      | `modelarts_publish_version.json` 中定义的 tag                                                    |
-| `publish`            | `true` 时推送镜像；`false` 时只构建                                                              |
-| `image_repositories` | 发布目标仓库，留空时使用仓库变量 `IMAGE_REPOSITORIES`，再回退到 `ghcr.io/<owner>/modelarts-cann` |
+| 参数                 | 说明                                                                      |
+| -------------------- | ------------------------------------------------------------------------- |
+| `image_tag`          | 要发布的 tag                                                              |
+| `image_key`          | 可选，存在多个分类使用同名 tag 时填写 `images/<platform>/<runtime>/<tag>` |
+| `publish`            | `true` 时推送镜像；`false` 时只构建                                       |
+| `image_repositories` | 发布目标仓库，留空时使用仓库变量 `IMAGE_REPOSITORIES`，再回退到默认 GHCR  |
 
 发布到多个仓库时使用逗号或空白分隔：
 
 ```text
-ghcr.io/<owner>/modelarts-cann,docker.io/<namespace>/modelarts-cann,quay.io/<namespace>/modelarts-cann,swr.cn-southwest-2.myhuaweicloud.com/<organization>/modelarts-cann
+ghcr.io/<owner>,docker.io/<namespace>,quay.io/<namespace>,swr.cn-southwest-2.myhuaweicloud.com/<organization>
 ```
 
-仓库名会自动转换为小写；例如 `ghcr.io/EterLuu/modelarts-cann` 会规范化为 `ghcr.io/eterluu/modelarts-cann`。
+仓库名会自动转换为小写。填写命名空间或基础仓库时，发布脚本会按镜像目录自动补齐或替换末级仓库名。例如发布 `images/modelarts/cuda/...` 时，`swr.cn-southwest-2.myhuaweicloud.com/<organization>` 会变成 `swr.cn-southwest-2.myhuaweicloud.com/<organization>/modelarts-cuda`。
 
-可以在 `Settings -> Secrets and variables -> Actions -> Variables` 中添加仓库变量：
-
-```text
-IMAGE_REPOSITORIES=swr.cn-southwest-2.myhuaweicloud.com/<organization>/modelarts-cann
-```
-
-手动运行 workflow 时，`image_repositories` 输入为空会自动使用该变量；填写输入值则覆盖该变量。
 `IMAGE_REPOSITORIES` 和 `image_repositories` 只能包含镜像仓库地址，不要写入用户名、密码、token 或 URL scheme。登录凭据必须放在 Secrets 中。
 
-发布流程会先按架构推送 digest，再创建并推送最终 manifest list，因此最终 tag 是多架构镜像。
+发布流程会先按架构推送 digest，再创建并推送最终 manifest list。
 
 ## 5. 批量发布
 
-运行 `Batch Build and Publish ModelArts Image`：
+运行 `Batch Build and Publish Images`：
 
-| 参数                 | 说明                                                           |
-| -------------------- | -------------------------------------------------------------- |
-| `modelarts_version`  | 匹配 `modelarts_publish_version.json` 中的 `modelarts_version` |
-| `publish`            | 是否推送                                                       |
-| `image_repositories` | 发布目标仓库                                                   |
+| 参数                 | 说明                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| `image_version`      | 匹配 `image_publish_version.json` 中的 `image_version`，或从目录 tag 自动推导出的版本 |
+| `publish`            | 是否推送                                                                              |
+| `image_repositories` | 发布目标仓库                                                                          |
 
-该 workflow 会先生成匹配 tag 列表，再逐个调用 `Build and Publish ModelArts Image`。
+该 workflow 会先生成匹配 tag 和 `image_key` 列表，再逐个调用 `Build and Publish Image`。同一 `image_version` 下的不同分类会分别发布到自己的仓库后缀。
 
 ## 6. 发布凭据
 
@@ -117,13 +113,13 @@ IMAGE_REPOSITORIES=swr.cn-southwest-2.myhuaweicloud.com/<organization>/modelarts
 
 ## 7. 常见问题
 
-### ARM 构建失败或 runner 不存在
+### runner 不存在或架构不匹配
 
-检查 `modelarts_publish_version.json` 中 `arches[].runner` 是否与仓库可用 runner 名称一致。GitHub 托管 ARM runner 不可用时，可以改成自托管 runner label。
+检查 `image_publish_version.json` 中 `arches[].runner` 是否与仓库可用 runner 名称一致。某些运行环境只适合 `linux/amd64`，应显式配置 `arches` 或依赖工具的默认推导。
 
 ### 发布到 DockerHub、Quay 或 Huawei Cloud SWR 登录失败
 
-确认 `image_repositories` 中包含的 registry 与 Secrets 匹配。例如发布到 `docker.io/<namespace>/modelarts-cann` 时必须配置 `DOCKER_USERNAME` 和 `DOCKER_TOKEN`；发布到 `swr.cn-southwest-2.myhuaweicloud.com/<organization>/modelarts-cann` 时必须配置 SWR 对应凭据。
+确认 `image_repositories` 中包含的 registry 与 Secrets 匹配。例如发布到 `docker.io/<namespace>` 时必须配置 `DOCKER_USERNAME` 和 `DOCKER_TOKEN`；发布到 `swr.cn-southwest-2.myhuaweicloud.com/<organization>` 时必须配置 SWR 对应凭据。
 
 ### 需要新增别名 tag
 

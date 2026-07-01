@@ -1,10 +1,10 @@
-name: Batch Build and Publish ModelArts Image
+name: Batch Build and Publish Images
 
 on:
   workflow_dispatch:
     inputs:
-      modelarts_version:
-        description: "ModelArts version defined in modelarts_publish_version.json"
+      image_version:
+        description: "Image version defined in image_publish_version.json"
         required: true
         default: "9.0.0"
         type: string
@@ -13,7 +13,7 @@ on:
         default: false
         type: boolean
       image_repositories:
-        description: "Optional override. Blank uses IMAGE_REPOSITORIES, then defaults to ghcr.io/<owner>/modelarts-cann."
+        description: "Optional override. Blank uses IMAGE_REPOSITORIES, then defaults to ghcr.io/<owner>/<platform>-<runtime>."
         required: false
         default: ""
         type: string
@@ -26,7 +26,7 @@ env:
   IMAGE_REPOSITORIES: ${{ vars.IMAGE_REPOSITORIES }}
 
 concurrency:
-  group: batch-modelarts
+  group: batch-images
   cancel-in-progress: false
 
 jobs:
@@ -39,16 +39,16 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Validate metadata
-        run: python3 scripts/modelarts_metadata.py validate
+        run: python3 scripts/image_metadata.py validate
 
       - name: Generate matrix
         id: matrix
         run: |
-          MATRIX="$(python3 scripts/modelarts_metadata.py batch-matrix --modelarts-version "${{ inputs.modelarts_version }}")"
+          MATRIX="$(python3 scripts/image_metadata.py batch-matrix --image-version "${{ inputs.image_version }}")"
           echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
 
   build:
-    name: build ${{ matrix.modelarts_tag }}
+    name: build ${{ matrix.image_tag }}
     needs: prepare
     permissions:
       contents: read
@@ -56,9 +56,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
-    uses: ./.github/workflows/build_and_push_modelarts.yml
+    uses: ./.github/workflows/build_and_push_image.yml
     with:
-      modelarts_tag: ${{ matrix.modelarts_tag }}
+      image_tag: ${{ matrix.image_tag }}
+      image_key: ${{ matrix.image_key }}
       publish: ${{ inputs.publish }}
       image_repositories: ${{ inputs.image_repositories }}
     secrets: inherit
