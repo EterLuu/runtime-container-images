@@ -207,13 +207,7 @@ RUN set -eux; \
         --name torch-2.7.1 \
         --display-name "torch-2.7.1"; \
     \
-    python - <<'PY' \
-import torch; \
-print("torch:", torch.__version__); \
-print("torch cuda:", torch.version.cuda); \
-print("cuda available during build:", torch.cuda.is_available()); \
-PY \
-    ; \
+    python -c 'import torch; print("torch:", torch.__version__); print("torch cuda:", torch.version.cuda); print("cuda available during build:", torch.cuda.is_available())'; \
     conda deactivate; \
     conda clean -afy; \
     rm -rf /home/ma-user/.cache/pip; \
