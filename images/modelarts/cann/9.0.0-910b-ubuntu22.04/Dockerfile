@@ -160,15 +160,14 @@ RUN set -eux; \
         \
         ARCH="$(uname -m)"; \
         if [[ "${ARCH}" == "x86_64" ]]; then \
-            python -m pip install \
+            python -m pip install --no-cache-dir \
                 --index-url "${PYTORCH_CPU_INDEX_URL}" \
                 "torch==${TORCH_VERSION}+cpu" \
                 "torchvision==${TORCHVISION_VERSION}+cpu" \
                 "torchaudio==${TORCHAUDIO_VERSION}+cpu"; \
         elif [[ "${ARCH}" == "aarch64" ]]; then \
-            python -m pip install \
-                -i "${PYPI_INDEX_URL}" \
-                --trusted-host "${PYPI_TRUSTED_HOST}" \
+            python -m pip install --no-cache-dir \
+                --index-url "${PYTORCH_CPU_INDEX_URL}" \
                 "torch==${TORCH_VERSION}" \
                 "torchvision==${TORCHVISION_VERSION}" \
                 "torchaudio==${TORCHAUDIO_VERSION}"; \
