@@ -56,6 +56,13 @@ RUN set -eux; \
     fi; \
     chmod -R 750 /home/ma-user
 
+# Align CANN metadata ownership with the runtime user to avoid torch-npu collect_env warnings.
+RUN set -eux; \
+    CANN_HOME=/usr/local/Ascend; \
+    if [ -d "${CANN_HOME}" ]; then \
+        chown -R ma-user:ma-group "${CANN_HOME}"; \
+    fi
+
 # Allow ma-user to use sudo
 RUN set -eux; \
     echo 'ma-user ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ma-user; \
