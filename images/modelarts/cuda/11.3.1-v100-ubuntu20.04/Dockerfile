@@ -181,8 +181,8 @@ RUN set -eux; \
     \
     python -m pip install --upgrade pip wheel setuptools pyyaml packaging; \
     \
-    python -m pip install --no-cache-dir \
-        --index-url "${PYTORCH_STABLE_URL}" \
+    python -m pip install --no-cache-dir --no-index \
+        -f "${PYTORCH_STABLE_URL}" \
         "torch==${TORCH_VERSION}" \
         "torchvision==${TORCHVISION_VERSION}" \
         "torchaudio==${TORCHAUDIO_VERSION}"; \
