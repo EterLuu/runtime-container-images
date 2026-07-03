@@ -169,6 +169,15 @@ RUN set -eux; \
     source /home/ma-user/miniconda/etc/profile.d/conda.sh; \
     \
     conda create -y --name torch-2.7.1 python=${PYTHON_VERSION} pip "numpy<2.0"; \
+    printf '%s\n' \
+        "torch==${TORCH_VERSION}" \
+        "torchvision==${TORCHVISION_VERSION}" \
+        "torchaudio==${TORCHAUDIO_VERSION}" \
+        "numpy<2.0" \
+        > /tmp/pip-constraints.txt; \
+    \
+    export PIP_CONSTRAINT=/tmp/pip-constraints.txt; \
+    \
     conda activate torch-2.7.1; \
     \
     python -m pip install --upgrade pip wheel setuptools pyyaml packaging; \

@@ -150,14 +150,20 @@ ARG PYTORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 RUN set -eux; \
     source /home/ma-user/miniconda/etc/profile.d/conda.sh; \
-    printf '%s\n' 'numpy<2.0' > /tmp/pip-constraints.txt; \
+    printf '%s\n' \
+        "torch==${TORCH_VERSION}" \
+        "torchvision==${TORCHVISION_VERSION}" \
+        "torchaudio==${TORCHAUDIO_VERSION}" \
+        "numpy<2.0" \
+        > /tmp/pip-constraints.txt; \
+    \
     export PIP_CONSTRAINT=/tmp/pip-constraints.txt; \
     \
     create_npu_env() { \
         local ENV_NAME="$1"; \
-        local TORCH_VERSION="$2"; \
-        local TORCHVISION_VERSION="$3"; \
-        local TORCHAUDIO_VERSION="$4"; \
+        local TORCH_VERSION="$2+cpu"; \
+        local TORCHVISION_VERSION="$3+cpu"; \
+        local TORCHAUDIO_VERSION="$4+cpu"; \
         local TORCH_NPU_VERSION="$5"; \
         \
         conda create -y --name "${ENV_NAME}" python=3.11 pip "numpy<2.0"; \
@@ -169,9 +175,9 @@ RUN set -eux; \
         if [[ "${ARCH}" == "x86_64" ]]; then \
             python -m pip install --no-cache-dir \
                 --index-url "${PYTORCH_CPU_INDEX_URL}" \
-                "torch==${TORCH_VERSION}+cpu" \
-                "torchvision==${TORCHVISION_VERSION}+cpu" \
-                "torchaudio==${TORCHAUDIO_VERSION}+cpu"; \
+                "torch==${TORCH_VERSION}" \
+                "torchvision==${TORCHVISION_VERSION}" \
+                "torchaudio==${TORCHAUDIO_VERSION}"; \
         elif [[ "${ARCH}" == "aarch64" ]]; then \
             python -m pip install --no-cache-dir \
                 --index-url "${PYTORCH_CPU_INDEX_URL}" \
