@@ -28,6 +28,7 @@ scripts/publish_image.sh                     # 本地 buildx 发布脚本
 | `modelarts-cann` | `9.0.0-910-ubuntu22.04`   | `ascendai/cann:9.0.0-910-ubuntu22.04-py3.11`  | `ma-user` |
 | `modelarts-cann` | `9.0.0-950-ubuntu22.04`   | `ascendai/cann:9.0.0-950-ubuntu22.04-py3.11`  | `ma-user` |
 | `modelarts-cann` | `9.0.0-a3-ubuntu22.04`    | `ascendai/cann:9.0.0-a3-ubuntu22.04-py3.11`   | `ma-user` |
+| `modelarts-cuda` | `11.3.1-v100-ubuntu20.04` | `nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04` | `ma-user` |
 | `modelarts-cuda` | `12.6.1-v100-ubuntu24.04` | `nvidia/cuda:12.6.1-cudnn-devel-ubuntu24.04`  | `ma-user` |
 
 CANN 的 `9.0.0-910b-ubuntu22.04` 是模板目录，其它芯片版本由 `derived_chips` 自动展开，构建时仅替换 Dockerfile 顶层 `BASE_IMAGE`。CUDA 样例没有配置 `derived_chips`，会按实际目录直接构建。
@@ -47,6 +48,9 @@ python3 scripts/image_metadata.py validate
 ```bash
 IMAGE_REPOSITORY=modelarts-cann \
   scripts/build_image.sh 9.0.0-310p-ubuntu22.04
+
+IMAGE_REPOSITORY=modelarts-cuda \
+  scripts/build_image.sh 11.3.1-v100-ubuntu20.04
 
 IMAGE_REPOSITORY=modelarts-cuda \
   scripts/build_image.sh 12.6.1-v100-ubuntu24.04
