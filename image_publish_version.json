@@ -39,6 +39,26 @@
           "artifact_arch": "amd64"
         }
       ]
+    },
+    {
+      "image_version": "11.3.1",
+      "path": "images/modelarts/cuda/11.3.1-v100-ubuntu20.04",
+      "tags": ["11.3.1-v100-ubuntu20.04"],
+      "base_image": "nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04",
+      "cuda_version": "11.3.1",
+      "gpu": "v100",
+      "cuda_arch": "sm_70",
+      "os": "ubuntu",
+      "os_version": "20.04",
+      "python_version": "3.10",
+      "default_conda_env": "torch-1.12.1",
+      "arches": [
+        {
+          "platform": "linux/amd64",
+          "runner": "ubuntu-latest",
+          "artifact_arch": "amd64"
+        }
+      ]
     }
   ]
 }
