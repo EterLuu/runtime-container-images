@@ -201,7 +201,6 @@ RUN set -eux; \
         "sentencepiece" \
         "safetensors>=0.3,<0.5" \
         "tokenizers>=0.13,<0.16" \
-        "peft>=0.4,<0.9" \
         "einops" \
         "scipy" \
         "scikit-learn" \
