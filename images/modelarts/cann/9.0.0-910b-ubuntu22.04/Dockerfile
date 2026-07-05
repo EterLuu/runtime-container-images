@@ -56,11 +56,11 @@ RUN set -eux; \
     fi; \
     chmod -R 750 /home/ma-user
 
-# Align CANN metadata ownership with the runtime user to avoid torch-npu collect_env warnings.
+# Align CANN metadata ownership with the runtime user to avoid torch-npu collect_env warnings
 RUN set -eux; \
-    CANN_HOME=/usr/local/Ascend; \
-    if [ -d "${CANN_HOME}" ]; then \
-        chown -R ma-user:ma-group "${CANN_HOME}"; \
+    chown -R ma-user:ma-group /usr/local/Ascend/cann-9.0.0; \
+    if [ -f /usr/local/Ascend/cann-9.0.0/aarch64-linux/ascend_ops_install.info ]; then \
+        chown ma-user:ma-group /usr/local/Ascend/cann-9.0.0/aarch64-linux/ascend_ops_install.info; \
     fi
 
 # Allow ma-user to use sudo
@@ -226,10 +226,10 @@ RUN set -eux; \
         conda deactivate; \
     }; \
     \
-    create_npu_env torch-2.10 2.10.0 0.25.0 2.10.0 2.10.0; \
-    create_npu_env torch-2.9  2.9.0  0.24.0 2.9.0  2.9.0.post2; \
-    create_npu_env torch-2.8  2.8.0  0.23.0 2.8.0  2.8.0.post4; \
-    create_npu_env torch-2.7.1  2.7.1  0.22.1 2.7.1  2.7.1.post4; \
+    create_npu_env torch-2.10   2.10.0  0.25.0  2.10.0  2.10.0; \
+    create_npu_env torch-2.9    2.9.0   0.24.0  2.9.0   2.9.0.post2; \
+    create_npu_env torch-2.8    2.8.0   0.23.0  2.8.0   2.8.0.post4; \
+    create_npu_env torch-2.7.1  2.7.1   0.22.1  2.7.1   2.7.1.post4; \
     \
     conda clean -afy; \
     rm -rf /home/ma-user/.cache/pip /tmp/pip-constraints.txt; \
