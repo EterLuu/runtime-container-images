@@ -227,9 +227,9 @@ RUN set -eux; \
     }; \
     \
     create_npu_env torch-2.10 2.10.0 0.25.0 2.10.0 2.10.0; \
-    create_npu_env torch-2.9 2.9.0 0.24.0 2.9.0 2.9.0.post2; \
-    create_npu_env torch-2.8 2.8.0 0.23.0 2.8.0 2.8.0.post4; \
-    create_npu_env torch-2.7.1 2.7.1 0.22.1 2.7.1 2.7.1.post4; \
+    create_npu_env torch-2.9  2.9.0  0.24.0 2.9.0  2.9.0.post2; \
+    create_npu_env torch-2.8  2.8.0  0.23.0 2.8.0  2.8.0.post4; \
+    create_npu_env torch-2.7.1  2.7.1  0.22.1 2.7.1  2.7.1.post4; \
     \
     conda clean -afy; \
     rm -rf /home/ma-user/.cache/pip /tmp/pip-constraints.txt; \
