@@ -176,9 +176,9 @@ RUN set -eux; \
                 "torchvision==${INSTALL_TORCHVISION_VERSION}" \
                 "torchaudio==${INSTALL_TORCHAUDIO_VERSION}"; \
         elif [[ "${ARCH}" == "aarch64" ]]; then \
-            INSTALL_TORCH_VERSION="${TORCH_VERSION}+cpu"; \
-            INSTALL_TORCHVISION_VERSION="${TORCHVISION_VERSION}+cpu"; \
-            INSTALL_TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION}+cpu"; \
+            INSTALL_TORCH_VERSION="${TORCH_VERSION}"; \
+            INSTALL_TORCHVISION_VERSION="${TORCHVISION_VERSION}"; \
+            INSTALL_TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION}"; \
             python -m pip install --no-cache-dir \
                 --index-url "${PYTORCH_CPU_INDEX_URL}" \
                 "torch==${INSTALL_TORCH_VERSION}" \
