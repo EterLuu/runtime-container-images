@@ -159,35 +159,26 @@ RUN set -eux; \
         local INSTALL_TORCH_VERSION; \
         local INSTALL_TORCHVISION_VERSION; \
         local INSTALL_TORCHAUDIO_VERSION; \
-        \
-        conda create -y --name "${ENV_NAME}" python=3.11 pip "numpy<2.0"; \
-        conda activate "${ENV_NAME}"; \
-        \
-        python -m pip install --upgrade pip wheel setuptools pyyaml; \
+        unset PIP_CONSTRAINT; \
         \
         ARCH="$(uname -m)"; \
         if [[ "${ARCH}" == "x86_64" ]]; then \
             INSTALL_TORCH_VERSION="${TORCH_VERSION}+cpu"; \
             INSTALL_TORCHVISION_VERSION="${TORCHVISION_VERSION}+cpu"; \
             INSTALL_TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION}+cpu"; \
-            python -m pip install --no-cache-dir \
-                --index-url "${PYTORCH_CPU_INDEX_URL}" \
-                "torch==${INSTALL_TORCH_VERSION}" \
-                "torchvision==${INSTALL_TORCHVISION_VERSION}" \
-                "torchaudio==${INSTALL_TORCHAUDIO_VERSION}"; \
         elif [[ "${ARCH}" == "aarch64" ]]; then \
             INSTALL_TORCH_VERSION="${TORCH_VERSION}"; \
             INSTALL_TORCHVISION_VERSION="${TORCHVISION_VERSION}"; \
             INSTALL_TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION}"; \
-            python -m pip install --no-cache-dir \
-                --index-url "${PYTORCH_CPU_INDEX_URL}" \
-                "torch==${INSTALL_TORCH_VERSION}" \
-                "torchvision==${INSTALL_TORCHVISION_VERSION}" \
-                "torchaudio==${INSTALL_TORCHAUDIO_VERSION}"; \
         else \
             echo "Unsupported architecture: ${ARCH}" >&2; \
             exit 1; \
         fi; \
+        \
+        conda create -y --name "${ENV_NAME}" python=3.11 pip "numpy<2.0"; \
+        conda activate "${ENV_NAME}"; \
+        \
+        python -m pip install --upgrade pip wheel setuptools pyyaml; \
         \
         printf '%s\n' \
             "torch==${INSTALL_TORCH_VERSION}" \
@@ -196,6 +187,12 @@ RUN set -eux; \
             "numpy<2.0" \
             > /tmp/pip-constraints.txt; \
         export PIP_CONSTRAINT=/tmp/pip-constraints.txt; \
+        \
+        python -m pip install --no-cache-dir \
+            --index-url "${PYTORCH_CPU_INDEX_URL}" \
+            "torch==${INSTALL_TORCH_VERSION}" \
+            "torchvision==${INSTALL_TORCHVISION_VERSION}" \
+            "torchaudio==${INSTALL_TORCHAUDIO_VERSION}"; \
         \
         python -m pip install \
             -i "${PYPI_INDEX_URL}" \
