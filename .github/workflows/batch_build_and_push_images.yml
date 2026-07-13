@@ -34,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      release_timestamp: ${{ steps.release.outputs.release_timestamp }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -46,6 +47,10 @@ jobs:
         run: |
           MATRIX="$(python3 scripts/image_metadata.py batch-matrix --image-version "${{ inputs.image_version }}")"
           echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate release timestamp
+        id: release
+        run: echo "release_timestamp=$(TZ=Asia/Shanghai date +%y%m%d-%H%M%S)" >> "${GITHUB_OUTPUT}"
 
   build:
     name: build ${{ matrix.image_tag }}
@@ -63,4 +68,5 @@ jobs:
       image_key: ${{ matrix.image_key }}
       publish: ${{ inputs.publish }}
       image_repositories: ${{ inputs.image_repositories }}
+      release_timestamp: ${{ needs.prepare.outputs.release_timestamp }}
     secrets: inherit

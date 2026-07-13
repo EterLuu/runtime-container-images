@@ -19,6 +19,10 @@ on:
         description: "Optional override. Blank uses IMAGE_REPOSITORIES, then defaults to ghcr.io/<owner>/<platform>-<runtime>."
         default: ""
         type: string
+      release_timestamp:
+        description: "Optional shared release timestamp in YYMMDD-HHMMSS format"
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       image_tag:
@@ -40,6 +44,11 @@ on:
         required: false
         default: ""
         type: string
+      release_timestamp:
+        description: "Optional release timestamp in YYMMDD-HHMMSS format; blank uses current Asia/Shanghai time"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -54,6 +63,7 @@ jobs:
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       artifact_key: ${{ steps.artifact.outputs.artifact_key }}
+      release_timestamp: ${{ steps.release.outputs.release_timestamp }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -76,6 +86,18 @@ jobs:
             --image-tag "${{ inputs.image_tag }}" \
             --image-key "${{ inputs.image_key }}")"
           echo "artifact_key=${ARTIFACT_KEY}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate release timestamp
+        id: release
+        env:
+          INPUT_RELEASE_TIMESTAMP: ${{ inputs.release_timestamp }}
+        run: |
+          RELEASE_TIMESTAMP="${INPUT_RELEASE_TIMESTAMP:-$(TZ=Asia/Shanghai date +%y%m%d-%H%M%S)}"
+          if [[ ! "${RELEASE_TIMESTAMP}" =~ ^[0-9]{6}-[0-9]{6}$ ]]; then
+            echo "error: release_timestamp must use YYMMDD-HHMMSS format" >&2
+            exit 2
+          fi
+          echo "release_timestamp=${RELEASE_TIMESTAMP}" >> "${GITHUB_OUTPUT}"
 
   only-build:
     name: build ${{ inputs.image_tag }} (${{ matrix.platform }})
@@ -409,7 +431,10 @@ jobs:
           TAGS="$(python3 scripts/image_metadata.py tags \
             --image-tag "${{ inputs.image_tag }}" \
             --image-key "${{ inputs.image_key }}" \
-            --repositories "${REPOSITORIES}")"
+            --repositories "${REPOSITORIES}" \
+            --tag-suffix "-${{ needs.prepare.outputs.release_timestamp }}" \
+            --include-base-tags \
+            --include-latest)"
           echo "tags=${TAGS}" >> "${GITHUB_OUTPUT}"
 
       - name: Create manifest list and push

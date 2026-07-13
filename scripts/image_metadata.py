@@ -493,9 +493,20 @@ def command_tags(args: argparse.Namespace) -> None:
     repositories = categorized_repositories(
         parse_repositories(args.repositories), entry
     )
-    tags = [
-        f"{repository}:{tag}" for repository in repositories for tag in entry["tags"]
-    ]
+    tags = []
+    for repository in repositories:
+        published_tags = []
+        if args.include_base_tags or not args.tag_suffix:
+            published_tags.extend(entry["tags"])
+        if args.tag_suffix:
+            published_tags.extend(f"{tag}{args.tag_suffix}" for tag in entry["tags"])
+        if args.include_latest:
+            published_tags.append("latest")
+
+        for published_tag in unique_list(published_tags):
+            if not TAG_RE.match(published_tag):
+                raise MetadataError(f"invalid published image tag '{published_tag}'")
+            tags.append(f"{repository}:{published_tag}")
     if args.format == "json":
         print_json(tags)
     else:
@@ -568,6 +579,17 @@ def build_parser() -> argparse.ArgumentParser:
     tags.add_argument("--image-tag", required=True)
     tags.add_argument("--image-key", default="")
     tags.add_argument("--repositories", required=True)
+    tags.add_argument(
+        "--tag-suffix", default="", help="suffix appended to every generated tag"
+    )
+    tags.add_argument(
+        "--include-base-tags",
+        action="store_true",
+        help="include metadata tags without the suffix",
+    )
+    tags.add_argument(
+        "--include-latest", action="store_true", help="include the latest tag"
+    )
     tags.add_argument("--format", choices=("json", "newline"), default="json")
     tags.set_defaults(func=command_tags)
 

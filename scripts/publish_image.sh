@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-Usage: IMAGE_REPOSITORIES=<repo>[,<repo>...] [IMAGE_KEY=<images/...>] [PLATFORMS=linux/amd64,linux/arm64] scripts/publish_image.sh <image-tag>
+Usage: IMAGE_REPOSITORIES=<repo>[,<repo>...] [IMAGE_KEY=<images/...>] [PLATFORMS=linux/amd64,linux/arm64] [RELEASE_TIMESTAMP=YYMMDD-HHMMSS] scripts/publish_image.sh <image-tag>
 
 Build and push one runtime image with Docker Buildx.
 Login to every target registry before running this script.
@@ -30,6 +30,12 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 IMAGE_TAG="$1"
 IMAGE_KEY="${IMAGE_KEY:-}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
+RELEASE_TIMESTAMP="${RELEASE_TIMESTAMP:-$(TZ=Asia/Shanghai date +%y%m%d-%H%M%S)}"
+
+if [[ ! "${RELEASE_TIMESTAMP}" =~ ^[0-9]{6}-[0-9]{6}$ ]]; then
+  echo "error: RELEASE_TIMESTAMP must use YYMMDD-HHMMSS format" >&2
+  exit 2
+fi
 
 cd "${REPO_ROOT}"
 
@@ -44,6 +50,9 @@ done < <(python3 scripts/image_metadata.py tags \
   --image-tag "${IMAGE_TAG}" \
   --image-key "${IMAGE_KEY}" \
   --repositories "${IMAGE_REPOSITORIES}" \
+  --tag-suffix "-${RELEASE_TIMESTAMP}" \
+  --include-base-tags \
+  --include-latest \
   --format newline)
 
 set -x
