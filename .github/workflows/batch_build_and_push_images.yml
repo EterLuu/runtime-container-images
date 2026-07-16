@@ -50,7 +50,7 @@ jobs:
 
       - name: Generate release timestamp
         id: release
-        run: echo "release_timestamp=$(TZ=Asia/Shanghai date +%y%m%d-%H%M%S)" >> "${GITHUB_OUTPUT}"
+        run: echo "release_timestamp=$(TZ=Asia/Shanghai date +%y%m%d.%H%M%S)" >> "${GITHUB_OUTPUT}"
 
   build:
     name: build ${{ matrix.image_tag }}

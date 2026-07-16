@@ -87,7 +87,7 @@ ghcr.io/<owner>,docker.io/<namespace>,quay.io/<namespace>,swr.cn-southwest-2.myh
 
 `IMAGE_REPOSITORIES` 和 `image_repositories` 只能包含镜像仓库地址，不要写入用户名、密码、token 或 URL scheme。登录凭据必须放在 Secrets 中。
 
-发布流程会先按架构推送 digest，再创建并推送最终 manifest list。每次发布会同时更新基础版本 tag、带北京时间戳的 tag 和 `latest`，例如 `9.0.0-910b-ubuntu22.04`、`9.0.0-910b-ubuntu22.04-260711-122328` 和 `latest`。时间戳格式为 `YYMMDD-HHMMSS`，同一次批量发布共享同一个时间戳。批量发布多个镜像到同一仓库时，`latest` 最终指向最后完成发布的镜像。
+发布流程会先按架构推送 digest，再创建并推送最终 manifest list。每次发布会同时更新基础版本 tag、带 Release 标记的 tag 和 `latest`，例如 `9.0.0-910b-ubuntu22.04`、`9.0.0-910b-ubuntu22.04-r260716.122328` 和 `latest`。Release 标记格式为 `rYYMMDD.HHMMSS`，同一次批量发布共享同一个时间戳；本地发布可通过 `RELEASE_TIMESTAMP=YYMMDD.HHMMSS` 指定。批量发布多个镜像到同一仓库时，`latest` 最终指向最后完成发布的镜像。
 
 ## 5. 批量发布
 

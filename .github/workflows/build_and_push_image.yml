@@ -20,7 +20,7 @@ on:
         default: ""
         type: string
       release_timestamp:
-        description: "Optional shared release timestamp in YYMMDD-HHMMSS format"
+        description: "Optional shared release timestamp in YYMMDD.HHMMSS format"
         default: ""
         type: string
   workflow_dispatch:
@@ -45,7 +45,7 @@ on:
         default: ""
         type: string
       release_timestamp:
-        description: "Optional release timestamp in YYMMDD-HHMMSS format; blank uses current Asia/Shanghai time"
+        description: "Optional release timestamp in YYMMDD.HHMMSS format; blank uses current Asia/Shanghai time"
         required: false
         default: ""
         type: string
@@ -92,9 +92,9 @@ jobs:
         env:
           INPUT_RELEASE_TIMESTAMP: ${{ inputs.release_timestamp }}
         run: |
-          RELEASE_TIMESTAMP="${INPUT_RELEASE_TIMESTAMP:-$(TZ=Asia/Shanghai date +%y%m%d-%H%M%S)}"
-          if [[ ! "${RELEASE_TIMESTAMP}" =~ ^[0-9]{6}-[0-9]{6}$ ]]; then
-            echo "error: release_timestamp must use YYMMDD-HHMMSS format" >&2
+          RELEASE_TIMESTAMP="${INPUT_RELEASE_TIMESTAMP:-$(TZ=Asia/Shanghai date +%y%m%d.%H%M%S)}"
+          if [[ ! "${RELEASE_TIMESTAMP}" =~ ^[0-9]{6}\.[0-9]{6}$ ]]; then
+            echo "error: release_timestamp must use YYMMDD.HHMMSS format" >&2
             exit 2
           fi
           echo "release_timestamp=${RELEASE_TIMESTAMP}" >> "${GITHUB_OUTPUT}"
@@ -432,7 +432,7 @@ jobs:
             --image-tag "${{ inputs.image_tag }}" \
             --image-key "${{ inputs.image_key }}" \
             --repositories "${REPOSITORIES}" \
-            --tag-suffix "-${{ needs.prepare.outputs.release_timestamp }}" \
+            --tag-suffix="-r${{ needs.prepare.outputs.release_timestamp }}" \
             --include-base-tags \
             --include-latest)"
           echo "tags=${TAGS}" >> "${GITHUB_OUTPUT}"

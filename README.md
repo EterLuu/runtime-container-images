@@ -64,7 +64,7 @@ IMAGE_REPOSITORIES=ghcr.io/<owner> \
   scripts/publish_image.sh 9.0.0-910b-ubuntu22.04
 ```
 
-每次发布会让基础版本 tag、带北京时间戳的 tag 和 `latest` 指向同一个镜像，例如 `9.0.0-910b-ubuntu22.04`、`9.0.0-910b-ubuntu22.04-260711-122328` 和 `latest`。时间戳格式为 `YYMMDD-HHMMSS`；本地发布可通过 `RELEASE_TIMESTAMP` 指定，批量发布中的所有镜像共享同一个时间戳。批量发布多个镜像到同一仓库时，`latest` 最终指向最后完成发布的镜像。
+每次发布会让基础版本 tag、带 Release 标记的 tag 和 `latest` 指向同一个镜像，例如 `9.0.0-910b-ubuntu22.04`、`9.0.0-910b-ubuntu22.04-r260716.122328` 和 `latest`。Release 标记格式为 `rYYMMDD.HHMMSS`；本地发布可通过 `RELEASE_TIMESTAMP=YYMMDD.HHMMSS` 指定，批量发布中的所有镜像共享同一个时间戳。批量发布多个镜像到同一仓库时，`latest` 最终指向最后完成发布的镜像。
 
 `IMAGE_REPOSITORIES` 支持逗号或空白分隔的多个仓库。可以填写完整仓库，也可以只填写命名空间，脚本会按目录分类补齐末级仓库名：
 
@@ -82,7 +82,7 @@ IMAGE_REPOSITORIES="ghcr.io/<owner>,docker.io/<namespace>,swr.cn-southwest-2.myh
 
 ```text
 ghcr.io/<github-owner>/<platform>-<runtime>:<tag>
-ghcr.io/<github-owner>/<platform>-<runtime>:<tag>-<YYMMDD-HHMMSS>
+ghcr.io/<github-owner>/<platform>-<runtime>:<tag>-r<YYMMDD.HHMMSS>
 ghcr.io/<github-owner>/<platform>-<runtime>:latest
 ```
 
