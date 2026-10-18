@@ -1,6 +1,26 @@
 {
   "versions": [
     {
+      "image_version": "9.1.1",
+      "path": "images/modelarts/cann/9.1.1-910b-ubuntu22.04",
+      "tags": ["9.1.1-910b-ubuntu22.04"],
+      "base_image": "ascendai/cann:9.1.1-910b-ubuntu22.04-py3.11",
+      "cann_version": "9.1.1",
+      "chip": "910b",
+      "derived_chips": ["310p", "910", "950", "a3"],
+      "os": "ubuntu",
+      "os_version": "22.04",
+      "python_version": "3.11",
+      "default_conda_env": "torch-2.12",
+      "arches": [
+        {
+          "platform": "linux/arm64",
+          "runner": "ubuntu-22.04-arm",
+          "artifact_arch": "arm64"
+        }
+      ]
+    },
+    {
       "image_version": "9.0.0",
       "path": "images/modelarts/cann/9.0.0-910b-ubuntu22.04",
       "tags": ["9.0.0-910b-ubuntu22.04"],

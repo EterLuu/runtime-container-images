@@ -16,6 +16,7 @@ examples/self-host-cuda/                     # Self-host Compose 示例和使用
 .github/workflows/build_images.yml
 .github/workflows/build_and_push_image.yml
 .github/workflows/batch_build_and_push_images.yml
+.github/workflows/push_existing_image.yml
 ```
 
 目录前两级用于发布分类：`images/modelarts/cann/...` 发布到 `modelarts-cann`，`images/modelarts/cuda/...` 发布到 `modelarts-cuda`，`images/self-host/cuda/...` 发布到 `self-host-cuda`。
@@ -24,6 +25,11 @@ examples/self-host-cuda/                     # Self-host Compose 示例和使用
 
 | 分类             | 标签                      | 基础镜像                                      | 默认用户  |
 | ---------------- | ------------------------- | --------------------------------------------- | --------- |
+| `modelarts-cann` | `9.1.1-910b-ubuntu22.04` | `ascendai/cann:9.1.1-910b-ubuntu22.04-py3.11` | `ma-user` |
+| `modelarts-cann` | `9.1.1-310p-ubuntu22.04` | `ascendai/cann:9.1.1-310p-ubuntu22.04-py3.11` | `ma-user` |
+| `modelarts-cann` | `9.1.1-910-ubuntu22.04`  | `ascendai/cann:9.1.1-910-ubuntu22.04-py3.11`  | `ma-user` |
+| `modelarts-cann` | `9.1.1-950-ubuntu22.04`  | `ascendai/cann:9.1.1-950-ubuntu22.04-py3.11`  | `ma-user` |
+| `modelarts-cann` | `9.1.1-a3-ubuntu22.04`   | `ascendai/cann:9.1.1-a3-ubuntu22.04-py3.11`   | `ma-user` |
 | `modelarts-cann` | `9.0.0-910b-ubuntu22.04`  | `ascendai/cann:9.0.0-910b-ubuntu22.04-py3.11` | `ma-user` |
 | `modelarts-cann` | `9.0.0-310p-ubuntu22.04`  | `ascendai/cann:9.0.0-310p-ubuntu22.04-py3.11` | `ma-user` |
 | `modelarts-cann` | `9.0.0-910-ubuntu22.04`   | `ascendai/cann:9.0.0-910-ubuntu22.04-py3.11`  | `ma-user` |
@@ -33,7 +39,9 @@ examples/self-host-cuda/                     # Self-host Compose 示例和使用
 | `modelarts-cuda` | `12.6.1-v100-ubuntu24.04` | `nvidia/cuda:12.6.1-cudnn-devel-ubuntu24.04`  | `ma-user` |
 | `self-host-cuda` | `12.8.1-ubuntu24.04`      | `nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04` | `root`    |
 
-CANN 的 `9.0.0-910b-ubuntu22.04` 是模板目录，其它芯片版本由 `derived_chips` 自动展开，构建时仅替换 Dockerfile 顶层 `BASE_IMAGE`。CUDA 样例没有配置 `derived_chips`，会按实际目录直接构建。
+CANN 的 `9.1.1-910b-ubuntu22.04` 和 `9.0.0-910b-ubuntu22.04` 是模板目录，其它芯片版本由 `derived_chips` 自动展开，构建时仅替换 Dockerfile 顶层 `BASE_IMAGE`。9.1.1 默认使用 `torch-2.12`，并提供 CANN 9.1.X 对应的 TorchNPU 26.1.1 兼容环境。CUDA 样例没有配置 `derived_chips`，会按实际目录直接构建。
+
+CANN、ModelArts CUDA 和 self-host CUDA 镜像会在运行时启用对应环境的 pip constraint，保护 PyTorch、TorchVision、TorchAudio 和 NumPy 的版本；切换 CANN conda 环境时会自动切换到该环境自己的约束文件。
 
 构建前会把同类型目录下的 `scripts/` 复制到目标构建目录的 `scripts/` 下，例如 `images/modelarts/cuda/scripts` 会复制到 `images/modelarts/cuda/<tag>/scripts`。
 
@@ -96,6 +104,17 @@ IMAGE_REPOSITORIES="ghcr.io/<owner>,docker.io/<namespace>,swr.cn-southwest-2.myh
 - `Build Images`：PR 或 push 修改 `images/**` 时自动构建实际存在的 `images/<platform>/<runtime>/<tag>` 目录，不展开 `derived_chips`，不推送镜像。
 - `Build and Publish Image`：手动或被其它 workflow 调用，支持只构建或构建并发布指定 tag。
 - `Batch Build and Publish Images`：按 `image_version` 批量调用发布 workflow，会展开 CANN 的 `derived_chips`。
+- `Push Existing Docker Image`：单独登录指定 Docker 仓库，并推送 runner 上已经存在的镜像。
+
+`Push Existing Docker Image` 是独立的手动 workflow。填写仓库或组织前缀、登录命令和本地镜像名即可；workflow 会自动生成目标镜像名，例如：
+
+```text
+registry: docker.io/<owner>
+login_command: printf '%s\n' '<token>' | docker login --username '<username>' --password-stdin docker.io
+image_name: modelarts-cann:9.1.1-910b-ubuntu22.04
+```
+
+登录命令由本次运行临时提供，不读取仓库 Secrets；登录命令的标准输出和错误输出会被 workflow 抑制，不会进入 Actions 日志。由于手动输入仍会保留在 workflow run 的输入记录中，不要把它当作 Secret 长期使用。该 workflow 运行在新的 runner 上，因此镜像必须预先存在于该 runner 的 Docker daemon 中；GitHub-hosted runner 不会自动保留其它 workflow 构建的本地镜像。
 
 默认发布到：
 

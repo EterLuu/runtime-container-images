@@ -1,0 +1,86 @@
+name: Push Existing Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      registry:
+        description: "Docker registry or organization prefix, for example docker.io/my-org"
+        required: true
+        type: string
+      login_command:
+        description: "Temporary non-interactive Docker login command, for example printf TOKEN | docker login -u USER --password-stdin docker.io"
+        required: true
+        type: string
+      image_name:
+        description: "Existing local image name to push, including its tag"
+        required: true
+        type: string
+      runner:
+        description: "Runner label where the existing Docker image is available"
+        required: false
+        default: "ubuntu-latest"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  push:
+    name: push ${{ inputs.image_name }}
+    runs-on: ${{ inputs.runner }}
+    env:
+      REGISTRY: ${{ inputs.registry }}
+      LOGIN_COMMAND: ${{ inputs.login_command }}
+      IMAGE_NAME: ${{ inputs.image_name }}
+    steps:
+      - name: Log in to Docker registry
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          login_output="$(mktemp)"
+          trap 'rm -f "${login_output}"' EXIT
+          # Keep the command in an environment variable and suppress both
+          # stdout and stderr so login output cannot enter the Actions log.
+          if ! bash -c 'eval "${LOGIN_COMMAND}"' >"${login_output}" 2>&1; then
+            echo "Docker login failed; login output was suppressed." >&2
+            exit 1
+          fi
+
+      - name: Verify local image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker image inspect "${IMAGE_NAME}" >/dev/null
+
+      - name: Tag image for target registry
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          registry="${REGISTRY%/}"
+          if [[ -z "${registry}" || "${registry}" == *://* || "${registry}" == */ ]]; then
+            echo "registry must be a Docker registry or organization prefix without a URL scheme" >&2
+            exit 2
+          fi
+
+          if [[ "${IMAGE_NAME}" == "${registry}/"* ]]; then
+            target_image="${IMAGE_NAME}"
+          else
+            target_image="${registry}/${IMAGE_NAME}"
+          fi
+
+          echo "target_image=${target_image}" >> "${GITHUB_ENV}"
+          if [[ "${IMAGE_NAME}" != "${target_image}" ]]; then
+            docker tag "${IMAGE_NAME}" "${target_image}"
+          fi
+
+      - name: Push image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker push "${target_image}"
+
+      - name: Log out from Docker registry
+        if: ${{ always() }}
+        shell: bash
+        run: docker logout "${REGISTRY%%/*}" || true

@@ -125,13 +125,20 @@ RUN set -eux; \
         "torch==${TORCH_VERSION}" \
         "torchvision==${TORCHVISION_VERSION}" \
         "torchaudio==${TORCHAUDIO_VERSION}"; \
+    printf '%s\n' \
+        "torch==${TORCH_VERSION}" \
+        "torchvision==${TORCHVISION_VERSION}" \
+        "torchaudio==${TORCHAUDIO_VERSION}" \
+        "numpy<2.0" \
+        > "${VIRTUAL_ENV}/pip-constraints.txt"; \
+    export PIP_CONSTRAINT="${VIRTUAL_ENV}/pip-constraints.txt"; \
     python -m pip install \
         accelerate \
         datasets \
         einops \
         huggingface-hub \
         ipykernel \
-        jupyterlab \
+        jupyterlab==4.4.10 \
         librosa \
         lightgbm \
         matplotlib \
@@ -161,6 +168,8 @@ RUN set -eux; \
         --name pytorch-cu128 \
         --display-name "PyTorch CUDA 12.8"; \
     python -c 'import torch; print("torch:", torch.__version__); print("torch cuda:", torch.version.cuda)'
+
+ENV PIP_CONSTRAINT=/opt/venv/pip-constraints.txt
 
 COPY --chmod=755 scripts/self-host-entrypoint.sh /usr/local/bin/self-host-entrypoint.sh
 

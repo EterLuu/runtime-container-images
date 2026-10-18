@@ -15,6 +15,7 @@ images/<platform>/<runtime>/<tag>/Dockerfile
 当前示例：
 
 ```text
+images/modelarts/cann/9.1.1-910b-ubuntu22.04/Dockerfile
 images/modelarts/cann/9.0.0-910b-ubuntu22.04/Dockerfile
 images/modelarts/cuda/12.6.1-v100-ubuntu24.04/Dockerfile
 images/self-host/cuda/12.8.1-ubuntu24.04/Dockerfile
@@ -23,6 +24,10 @@ images/self-host/cuda/12.8.1-ubuntu24.04/Dockerfile
 CANN 模板可以通过 `chip` 和 `derived_chips` 自动衍生 tag：
 
 ```text
+9.1.1-310p-ubuntu22.04
+9.1.1-910-ubuntu22.04
+9.1.1-950-ubuntu22.04
+9.1.1-a3-ubuntu22.04
 9.0.0-310p-ubuntu22.04
 9.0.0-910-ubuntu22.04
 9.0.0-950-ubuntu22.04
@@ -30,6 +35,8 @@ CANN 模板可以通过 `chip` 和 `derived_chips` 自动衍生 tag：
 ```
 
 衍生过程只替换 Dockerfile 顶层 `BASE_IMAGE`。没有 `chip` 的镜像不会做芯片衍生，直接按目录 tag 构建。
+
+CANN、ModelArts CUDA 和 self-host CUDA 镜像会把核心 PyTorch 依赖写入环境自己的 constraint 文件，并在用户运行时通过 `PIP_CONSTRAINT` 自动启用；CANN 切换 conda 环境时会同步切换约束文件。
 
 构建前会自动把同类型目录下的 `scripts/` 复制到目标构建目录的 `scripts/` 下，例如 `images/modelarts/cuda/scripts` 会复制到 `images/modelarts/cuda/<tag>/scripts`。
 
@@ -102,7 +109,18 @@ ghcr.io/<owner>,docker.io/<namespace>,quay.io/<namespace>,swr.cn-southwest-2.myh
 
 该 workflow 会先生成匹配 tag 和 `image_key` 列表，再逐个调用 `Build and Publish Image`。同一 `image_version` 下的不同分类会分别发布到自己的仓库后缀。
 
-## 6. 发布凭据
+## 6. 推送已有镜像
+
+`Push Existing Docker Image` 是独立的手动 workflow，只负责登录仓库并推送已经存在于 runner Docker daemon 中的镜像。运行时填写：
+
+- `registry`：仓库或组织前缀，例如 `docker.io/<owner>` 或 `swr.example.com/<organization>`。workflow 会把它和 `image_name` 拼成目标镜像名。
+- `login_command`：本次运行临时提供的非交互式登录命令，例如 `printf '%s\n' '<token>' | docker login --username '<username>' --password-stdin docker.io`。登录命令的标准输出和错误输出会被抑制。
+- `image_name`：本地已构建的镜像名和 tag，例如 `modelarts-cann:9.1.1-910b-ubuntu22.04`。
+- `runner`：镜像所在的 runner 标签；默认是 `ubuntu-latest`，通常应改为已有镜像的 self-hosted runner 标签。
+
+该 workflow 不读取仓库 Secrets，登录命令仅用于本次运行；但手动输入仍会保留在 workflow run 的输入记录中，不应当作长期凭据存储。由于 Actions 无法进行交互式输入，登录命令需要包含凭据或通过命令本身提供 stdin。GitHub-hosted runner 每次都是全新环境；如果镜像来自其它 workflow，需要先通过镜像仓库、artifact 或 self-hosted runner 传递到当前 runner。
+
+## 7. 发布凭据
 
 默认 GHCR 发布使用 `GITHUB_TOKEN`，需要 workflow 具备 `packages: write` 权限。发布到其他仓库时配置以下 Secrets：
 
@@ -112,7 +130,7 @@ ghcr.io/<owner>,docker.io/<namespace>,quay.io/<namespace>,swr.cn-southwest-2.myh
 | Quay.io          | `QUAY_USERNAME`, `QUAY_TOKEN`                                                   |
 | Huawei Cloud SWR | `SWR_USERNAME`, `SWR_PASSWORD`；也兼容 `SWR_TOKEN` 或 `HW_USERNAME`, `HW_TOKEN` |
 
-## 7. 常见问题
+## 8. 常见问题
 
 ### runner 不存在或架构不匹配
 

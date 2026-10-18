@@ -75,7 +75,7 @@ RUN set -eux; \
     chmod 0755 /run/sshd
 
 # Install code-server 4.x
-ARG CODE_SERVER_VERSION=4.20.1
+ARG CODE_SERVER_VERSION=4.141.0
 
 RUN set -eux; \
     apt-get update; \
@@ -150,7 +150,7 @@ ARG PYTORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 RUN set -eux; \
     source /home/ma-user/miniconda/etc/profile.d/conda.sh; \
-    create_npu_env() { \
+    create_npu_env() ( \
         local ENV_NAME="$1"; \
         local TORCH_VERSION="$2"; \
         local TORCHVISION_VERSION="$3"; \
@@ -159,6 +159,7 @@ RUN set -eux; \
         local INSTALL_TORCH_VERSION; \
         local INSTALL_TORCHVISION_VERSION; \
         local INSTALL_TORCHAUDIO_VERSION; \
+        local CONSTRAINT_FILE="/tmp/pip-constraints-${ENV_NAME}.txt"; \
         unset PIP_CONSTRAINT; \
         \
         ARCH="$(uname -m)"; \
@@ -185,8 +186,8 @@ RUN set -eux; \
             "torchvision==${INSTALL_TORCHVISION_VERSION}" \
             "torchaudio==${INSTALL_TORCHAUDIO_VERSION}" \
             "numpy<2.0" \
-            > /tmp/pip-constraints.txt; \
-        export PIP_CONSTRAINT=/tmp/pip-constraints.txt; \
+            > "${CONSTRAINT_FILE}"; \
+        export PIP_CONSTRAINT="${CONSTRAINT_FILE}"; \
         \
         python -m pip install --no-cache-dir \
             --index-url "${PYTORCH_CPU_INDEX_URL}" \
@@ -228,8 +229,18 @@ RUN set -eux; \
             --name "${ENV_NAME}" \
             --display-name "${ENV_NAME}"; \
         \
+        mkdir -p "${CONDA_PREFIX}/etc/conda/activate.d" "${CONDA_PREFIX}/etc/conda/deactivate.d"; \
+        cp "${CONSTRAINT_FILE}" "${CONDA_PREFIX}/pip-constraints.txt"; \
+        printf '%s\n' \
+            "export PIP_CONSTRAINT=\"${CONDA_PREFIX}/pip-constraints.txt\"" \
+            > "${CONDA_PREFIX}/etc/conda/activate.d/pip-constraints.sh"; \
+        printf '%s\n' \
+            'unset PIP_CONSTRAINT' \
+            > "${CONDA_PREFIX}/etc/conda/deactivate.d/pip-constraints.sh"; \
+        \
         conda deactivate; \
-    }; \
+        rm -f "${CONSTRAINT_FILE}"; \
+    ); \
     \
     create_npu_env torch-2.10 2.10.0 0.25.0 2.10.0 2.10.0; \
     create_npu_env torch-2.9  2.9.0  0.24.0 2.9.0  2.9.0.post2; \
@@ -237,13 +248,14 @@ RUN set -eux; \
     create_npu_env torch-2.7.1  2.7.1  0.22.1 2.7.1  2.7.1.post4; \
     \
     conda clean -afy; \
-    rm -rf /home/ma-user/.cache/pip /tmp/pip-constraints.txt; \
+    rm -rf /home/ma-user/.cache/pip; \
     \
     echo 'source /home/ma-user/miniconda/etc/profile.d/conda.sh' >> /home/ma-user/.bashrc; \
     echo 'conda activate torch-2.9' >> /home/ma-user/.bashrc
 
 ENV CONDA_DEFAULT_ENV=torch-2.9
 ENV PATH=/home/ma-user/miniconda/envs/torch-2.9/bin:/home/ma-user/miniconda/bin:${PATH}
+ENV PIP_CONSTRAINT=/home/ma-user/miniconda/envs/torch-2.9/pip-constraints.txt
 
 USER ma-user
 WORKDIR /home/ma-user

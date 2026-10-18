@@ -84,7 +84,7 @@ RUN set -eux; \
     chmod 0755 /run/sshd
 
 # Install code-server 4.x
-ARG CODE_SERVER_VERSION=4.20.1
+ARG CODE_SERVER_VERSION=4.141.0
 
 RUN set -eux; \
     apt-get update; \
@@ -214,16 +214,26 @@ RUN set -eux; \
         --name torch-1.12.1 \
         --display-name "torch-1.12.1"; \
     \
+    mkdir -p "${CONDA_PREFIX}/etc/conda/activate.d" "${CONDA_PREFIX}/etc/conda/deactivate.d"; \
+    cp /tmp/pip-constraints.txt "${CONDA_PREFIX}/pip-constraints.txt"; \
+    printf '%s\n' \
+        "export PIP_CONSTRAINT=\"${CONDA_PREFIX}/pip-constraints.txt\"" \
+        > "${CONDA_PREFIX}/etc/conda/activate.d/pip-constraints.sh"; \
+    printf '%s\n' \
+        'unset PIP_CONSTRAINT' \
+        > "${CONDA_PREFIX}/etc/conda/deactivate.d/pip-constraints.sh"; \
+    \
     python -c 'import torch; print("torch:", torch.__version__); print("torch cuda:", torch.version.cuda); print("cuda available during build:", torch.cuda.is_available())'; \
     conda deactivate; \
     conda clean -afy; \
-    rm -rf /home/ma-user/.cache/pip; \
+    rm -rf /home/ma-user/.cache/pip /tmp/pip-constraints.txt; \
     \
     echo 'source /home/ma-user/miniconda/etc/profile.d/conda.sh' >> /home/ma-user/.bashrc; \
     echo 'conda activate torch-1.12.1' >> /home/ma-user/.bashrc
 
 ENV CONDA_DEFAULT_ENV=torch-1.12.1
 ENV PATH=/home/ma-user/miniconda/envs/torch-1.12.1/bin:/home/ma-user/miniconda/bin:${PATH}
+ENV PIP_CONSTRAINT=/home/ma-user/miniconda/envs/torch-1.12.1/pip-constraints.txt
 
 USER ma-user
 WORKDIR /home/ma-user

@@ -1,0 +1,266 @@
+ARG BASE_IMAGE=ascendai/cann:9.1.1-910b-ubuntu22.04-py3.11
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Shanghai
+
+USER root
+
+# Config apt source to Huawei Cloud and install packages
+RUN set -eux; \
+    if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
+        cp -a /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.bak; \
+        sed -i 's@http://[^ ]*archive.ubuntu.com@http://mirrors.huaweicloud.com@g' /etc/apt/sources.list.d/ubuntu.sources; \
+        sed -i 's@http://[^ ]*security.ubuntu.com@http://mirrors.huaweicloud.com@g' /etc/apt/sources.list.d/ubuntu.sources; \
+        sed -i 's@http://ports.ubuntu.com/ubuntu-ports@http://mirrors.huaweicloud.com/ubuntu-ports@g' /etc/apt/sources.list.d/ubuntu.sources; \
+    elif [ -f /etc/apt/sources.list ]; then \
+        cp -a /etc/apt/sources.list /etc/apt/sources.list.bak; \
+        sed -i 's@http://[^ ]*archive.ubuntu.com@http://mirrors.huaweicloud.com@g' /etc/apt/sources.list; \
+        sed -i 's@http://[^ ]*security.ubuntu.com@http://mirrors.huaweicloud.com@g' /etc/apt/sources.list; \
+        sed -i 's@http://ports.ubuntu.com/ubuntu-ports@http://mirrors.huaweicloud.com/ubuntu-ports@g' /etc/apt/sources.list; \
+    fi; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        openssh-client \
+        openssh-server \
+        iputils-ping \
+        net-tools \
+        sudo \
+        ffmpeg \
+        curl \
+        ca-certificates \
+        git \
+        openssh-client \
+        vim \
+        less \
+        bash-completion \
+        htop \
+        p7zip-full \
+        tmux \
+        dumb-init
+
+# Create ma-group / ma-user
+RUN set -eux; \
+    existing_user="$(getent passwd 1000 | awk -F ':' '{print $1}' || true)"; \
+    existing_group="$(getent group 100 | awk -F ':' '{print $1}' || true)"; \
+    if [ -n "${existing_user}" ] && [ "${existing_user}" != "ma-user" ]; then \
+        userdel -r "${existing_user}" || true; \
+    fi; \
+    if [ -n "${existing_group}" ] && [ "${existing_group}" != "ma-group" ]; then \
+        groupmod -n ma-group "${existing_group}"; \
+    elif [ -z "${existing_group}" ]; then \
+        groupadd -g 100 ma-group; \
+    fi; \
+    if ! id ma-user >/dev/null 2>&1; then \
+        useradd -d /home/ma-user -m -u 1000 -g 100 -s /bin/bash ma-user; \
+    fi; \
+    chmod -R 750 /home/ma-user
+
+# Align CANN metadata ownership with the runtime user to avoid torch-npu collect_env warnings
+RUN set -eux; \
+    chown -R ma-user:ma-group /usr/local/Ascend/cann-9.1.1; \
+    if [ -f /usr/local/Ascend/cann-9.1.1/aarch64-linux/ascend_ops_install.info ]; then \
+        chown ma-user:ma-group /usr/local/Ascend/cann-9.1.1/aarch64-linux/ascend_ops_install.info; \
+    fi
+
+# Allow ma-user to use sudo
+RUN set -eux; \
+    echo 'ma-user ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ma-user; \
+    chmod 0440 /etc/sudoers.d/ma-user
+
+# Install OpenSSH for ModelArts
+RUN set -eux; \
+    ssh -V; \
+    mkdir -p /run/sshd; \
+    chmod 0755 /run/sshd
+
+# Install code-server 4.x
+ARG CODE_SERVER_VERSION=4.141.0
+
+RUN set -eux; \
+    apt-get update; \
+    ARCH="$(dpkg --print-architecture)"; \
+    case "${ARCH}" in \
+        amd64) CODE_SERVER_ARCH="amd64" ;; \
+        arm64) CODE_SERVER_ARCH="arm64" ;; \
+        *) echo "Unsupported architecture for code-server: ${ARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fL \
+        -o /tmp/code-server.deb \
+        "https://gh-proxy.org/https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server_${CODE_SERVER_VERSION}_${CODE_SERVER_ARCH}.deb"; \
+    apt-get install -y /tmp/code-server.deb; \
+    rm -f /tmp/code-server.deb; \
+    code-server --version; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+# Add ssh auto start
+COPY --chmod=755 scripts/start_sshd.sh /usr/local/bin/start_sshd.sh
+COPY --chmod=755 scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+ENV MY_SSHD_PORT=38888
+
+# Switch to ma-user and install Miniconda
+USER ma-user
+
+RUN set -eux; \
+    ARCH="$(uname -m)"; \
+    case "$ARCH" in \
+        x86_64) MINICONDA_ARCH="x86_64" ;; \
+        aarch64) MINICONDA_ARCH="aarch64" ;; \
+        *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;; \
+    esac; \
+    wget --no-check-certificate -O /tmp/miniconda.sh \
+        "https://mirrors.tuna.tsinghua.edu.cn/anaconda/miniconda/Miniconda3-latest-Linux-${MINICONDA_ARCH}.sh"; \
+    bash /tmp/miniconda.sh -b -u -p /home/ma-user/miniconda; \
+    rm -f /tmp/miniconda.sh; \
+    /home/ma-user/miniconda/bin/conda clean -afy
+
+ENV PATH=/home/ma-user/miniconda/bin:${PATH}
+
+# Configure conda and pip sources
+RUN set -eux; \
+    mkdir -p /home/ma-user/.pip; \
+    printf '%s\n' \
+      'channels:' \
+      '  - defaults' \
+      'show_channel_urls: true' \
+      'default_channels:' \
+      '  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main' \
+      '  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r' \
+      '  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2' \
+      'custom_channels:' \
+      '  conda-forge: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud' \
+      '  pytorch: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud' \
+      > /home/ma-user/.condarc; \
+    printf '%s\n' \
+      '[global]' \
+      'index-url = https://mirrors.huaweicloud.com/repository/pypi/simple' \
+      'trusted-host = mirrors.huaweicloud.com' \
+      'timeout = 120' \
+      > /home/ma-user/.pip/pip.conf
+
+# Create Ascend NPU compatible conda environments.
+# The ipykernel package is mandatory for starting a kernel.
+SHELL ["/bin/bash", "-lc"]
+
+ARG PYPI_INDEX_URL=https://mirrors.huaweicloud.com/repository/pypi/simple
+ARG PYPI_TRUSTED_HOST=mirrors.huaweicloud.com
+ARG PYTORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
+
+# TorchNPU 26.1.1 compatibility matrix for CANN 9.1.X.
+RUN set -eux; \
+    source /home/ma-user/miniconda/etc/profile.d/conda.sh; \
+    create_npu_env() ( \
+        local ENV_NAME="$1"; \
+        local TORCH_VERSION="$2"; \
+        local TORCHVISION_VERSION="$3"; \
+        local TORCHAUDIO_VERSION="$4"; \
+        local TORCH_NPU_VERSION="$5"; \
+        local INSTALL_TORCH_VERSION; \
+        local INSTALL_TORCHVISION_VERSION; \
+        local INSTALL_TORCHAUDIO_VERSION; \
+        local CONSTRAINT_FILE="/tmp/pip-constraints-${ENV_NAME}.txt"; \
+        unset PIP_CONSTRAINT; \
+        \
+        ARCH="$(uname -m)"; \
+        if [[ "${ARCH}" == "x86_64" ]]; then \
+            INSTALL_TORCH_VERSION="${TORCH_VERSION}+cpu"; \
+            INSTALL_TORCHVISION_VERSION="${TORCHVISION_VERSION}+cpu"; \
+            INSTALL_TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION}+cpu"; \
+        elif [[ "${ARCH}" == "aarch64" ]]; then \
+            INSTALL_TORCH_VERSION="${TORCH_VERSION}"; \
+            INSTALL_TORCHVISION_VERSION="${TORCHVISION_VERSION}"; \
+            INSTALL_TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION}"; \
+        else \
+            echo "Unsupported architecture: ${ARCH}" >&2; \
+            exit 1; \
+        fi; \
+        \
+        conda create -y --name "${ENV_NAME}" python=3.11 pip "numpy<2.0"; \
+        conda activate "${ENV_NAME}"; \
+        \
+        python -m pip install --upgrade pip wheel setuptools pyyaml; \
+        \
+        printf '%s\n' \
+            "torch==${INSTALL_TORCH_VERSION}" \
+            "torchvision==${INSTALL_TORCHVISION_VERSION}" \
+            "torchaudio==${INSTALL_TORCHAUDIO_VERSION}" \
+            "numpy<2.0" \
+            > "${CONSTRAINT_FILE}"; \
+        export PIP_CONSTRAINT="${CONSTRAINT_FILE}"; \
+        \
+        python -m pip install --no-cache-dir \
+            --index-url "${PYTORCH_CPU_INDEX_URL}" \
+            "torch==${INSTALL_TORCH_VERSION}" \
+            "torchvision==${INSTALL_TORCHVISION_VERSION}" \
+            "torchaudio==${INSTALL_TORCHAUDIO_VERSION}"; \
+        \
+        python -m pip install \
+            -i "${PYPI_INDEX_URL}" \
+            --trusted-host "${PYPI_TRUSTED_HOST}" \
+            "numpy<2.0" \
+            "torch-npu==${TORCH_NPU_VERSION}"; \
+        \
+        DS_BUILD_OPS=0 python -m pip install \
+            -i "${PYPI_INDEX_URL}" \
+            --trusted-host "${PYPI_TRUSTED_HOST}" \
+            "numpy<2.0" \
+            "ipykernel>=6.29,<7" \
+            transformers \
+            accelerate \
+            deepspeed \
+            librosa \
+            tqdm \
+            datasets \
+            sentencepiece \
+            safetensors \
+            tokenizers \
+            peft \
+            einops \
+            scipy \
+            scikit-learn \
+            pandas \
+            matplotlib \
+            pillow \
+            psutil; \
+        \
+        python -m ipykernel install \
+            --user \
+            --name "${ENV_NAME}" \
+            --display-name "${ENV_NAME}"; \
+        \
+        mkdir -p "${CONDA_PREFIX}/etc/conda/activate.d" "${CONDA_PREFIX}/etc/conda/deactivate.d"; \
+        cp "${CONSTRAINT_FILE}" "${CONDA_PREFIX}/pip-constraints.txt"; \
+        printf '%s\n' \
+            "export PIP_CONSTRAINT=\"${CONDA_PREFIX}/pip-constraints.txt\"" \
+            > "${CONDA_PREFIX}/etc/conda/activate.d/pip-constraints.sh"; \
+        printf '%s\n' \
+            'unset PIP_CONSTRAINT' \
+            > "${CONDA_PREFIX}/etc/conda/deactivate.d/pip-constraints.sh"; \
+        \
+        conda deactivate; \
+        rm -f "${CONSTRAINT_FILE}"; \
+    ); \
+    \
+    create_npu_env torch-2.12 2.12.0 0.27.0 2.12.0 2.12.0.post2; \
+    create_npu_env torch-2.11 2.11.0 0.26.0 2.11.0 2.11.0.post2; \
+    create_npu_env torch-2.10 2.10.0 0.25.0 2.10.0 2.10.0.post6; \
+    create_npu_env torch-2.9  2.9.0  0.24.0 2.9.0  2.9.0.post8; \
+    create_npu_env torch-2.7.1  2.7.1  0.22.1 2.7.1  2.7.1.post10; \
+    \
+    conda clean -afy; \
+    rm -rf /home/ma-user/.cache/pip; \
+    \
+    echo 'source /home/ma-user/miniconda/etc/profile.d/conda.sh' >> /home/ma-user/.bashrc; \
+    echo 'conda activate torch-2.12' >> /home/ma-user/.bashrc
+
+ENV CONDA_DEFAULT_ENV=torch-2.12
+ENV PATH=/home/ma-user/miniconda/envs/torch-2.12/bin:/home/ma-user/miniconda/bin:${PATH}
+ENV PIP_CONSTRAINT=/home/ma-user/miniconda/envs/torch-2.12/pip-constraints.txt
+
+USER ma-user
+WORKDIR /home/ma-user
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["bash"]
