@@ -149,6 +149,7 @@ ARG PYPI_TRUSTED_HOST=mirrors.huaweicloud.com
 ARG PYTORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 # TorchNPU 26.1.1 compatibility matrix for CANN 9.1.X.
+# PyTorch 2.12.0 currently has no matching torchaudio release; use TorchVision 0.27.0 only.
 RUN set -eux; \
     source /home/ma-user/miniconda/etc/profile.d/conda.sh; \
     create_npu_env() ( \
@@ -161,13 +162,18 @@ RUN set -eux; \
         local INSTALL_TORCHVISION_VERSION; \
         local INSTALL_TORCHAUDIO_VERSION; \
         local CONSTRAINT_FILE="/tmp/pip-constraints-${ENV_NAME}.txt"; \
+        local TORCH_PACKAGES=(); \
         unset PIP_CONSTRAINT; \
         \
         ARCH="$(uname -m)"; \
         if [[ "${ARCH}" == "x86_64" ]]; then \
             INSTALL_TORCH_VERSION="${TORCH_VERSION}+cpu"; \
             INSTALL_TORCHVISION_VERSION="${TORCHVISION_VERSION}+cpu"; \
-            INSTALL_TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION}+cpu"; \
+            if [[ -n "${TORCHAUDIO_VERSION}" ]]; then \
+                INSTALL_TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION}+cpu"; \
+            else \
+                INSTALL_TORCHAUDIO_VERSION=""; \
+            fi; \
         elif [[ "${ARCH}" == "aarch64" ]]; then \
             INSTALL_TORCH_VERSION="${TORCH_VERSION}"; \
             INSTALL_TORCHVISION_VERSION="${TORCHVISION_VERSION}"; \
@@ -176,6 +182,13 @@ RUN set -eux; \
             echo "Unsupported architecture: ${ARCH}" >&2; \
             exit 1; \
         fi; \
+        TORCH_PACKAGES=( \
+            "torch==${INSTALL_TORCH_VERSION}" \
+            "torchvision==${INSTALL_TORCHVISION_VERSION}" \
+        ); \
+        if [[ -n "${INSTALL_TORCHAUDIO_VERSION}" ]]; then \
+            TORCH_PACKAGES+=("torchaudio==${INSTALL_TORCHAUDIO_VERSION}"); \
+        fi; \
         \
         conda create -y --name "${ENV_NAME}" python=3.11 pip "numpy<2.0"; \
         conda activate "${ENV_NAME}"; \
@@ -183,18 +196,14 @@ RUN set -eux; \
         python -m pip install --upgrade pip wheel setuptools pyyaml; \
         \
         printf '%s\n' \
-            "torch==${INSTALL_TORCH_VERSION}" \
-            "torchvision==${INSTALL_TORCHVISION_VERSION}" \
-            "torchaudio==${INSTALL_TORCHAUDIO_VERSION}" \
+            "${TORCH_PACKAGES[@]}" \
             "numpy<2.0" \
             > "${CONSTRAINT_FILE}"; \
         export PIP_CONSTRAINT="${CONSTRAINT_FILE}"; \
         \
         python -m pip install --no-cache-dir \
             --index-url "${PYTORCH_CPU_INDEX_URL}" \
-            "torch==${INSTALL_TORCH_VERSION}" \
-            "torchvision==${INSTALL_TORCHVISION_VERSION}" \
-            "torchaudio==${INSTALL_TORCHAUDIO_VERSION}"; \
+            "${TORCH_PACKAGES[@]}"; \
         \
         python -m pip install \
             -i "${PYPI_INDEX_URL}" \
@@ -243,7 +252,7 @@ RUN set -eux; \
         rm -f "${CONSTRAINT_FILE}"; \
     ); \
     \
-    create_npu_env torch-2.12 2.12.0 0.27.0 2.12.0 2.12.0.post2; \
+    create_npu_env torch-2.12 2.12.0 0.27.0 "" 2.12.0.post2; \
     create_npu_env torch-2.11 2.11.0 0.26.0 2.11.0 2.11.0.post2; \
     create_npu_env torch-2.10 2.10.0 0.25.0 2.10.0 2.10.0.post6; \
     create_npu_env torch-2.9  2.9.0  0.24.0 2.9.0  2.9.0.post8; \
@@ -253,11 +262,11 @@ RUN set -eux; \
     rm -rf /home/ma-user/.cache/pip; \
     \
     echo 'source /home/ma-user/miniconda/etc/profile.d/conda.sh' >> /home/ma-user/.bashrc; \
-    echo 'conda activate torch-2.12' >> /home/ma-user/.bashrc
+    echo 'conda activate torch-2.11' >> /home/ma-user/.bashrc
 
-ENV CONDA_DEFAULT_ENV=torch-2.12
-ENV PATH=/home/ma-user/miniconda/envs/torch-2.12/bin:/home/ma-user/miniconda/bin:${PATH}
-ENV PIP_CONSTRAINT=/home/ma-user/miniconda/envs/torch-2.12/pip-constraints.txt
+ENV CONDA_DEFAULT_ENV=torch-2.11
+ENV PATH=/home/ma-user/miniconda/envs/torch-2.11/bin:/home/ma-user/miniconda/bin:${PATH}
+ENV PIP_CONSTRAINT=/home/ma-user/miniconda/envs/torch-2.11/pip-constraints.txt
 
 USER ma-user
 WORKDIR /home/ma-user

@@ -39,7 +39,7 @@ examples/self-host-cuda/                     # Self-host Compose 示例和使用
 | `modelarts-cuda` | `12.6.1-v100-ubuntu24.04` | `nvidia/cuda:12.6.1-cudnn-devel-ubuntu24.04`  | `ma-user` |
 | `self-host-cuda` | `12.8.1-ubuntu24.04`      | `nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04` | `root`    |
 
-CANN 的 `9.1.1-910b-ubuntu22.04` 和 `9.0.0-910b-ubuntu22.04` 是模板目录，其它芯片版本由 `derived_chips` 自动展开，构建时仅替换 Dockerfile 顶层 `BASE_IMAGE`。9.1.1 默认使用 `torch-2.12`，并提供 CANN 9.1.X 对应的 TorchNPU 26.1.1 兼容环境。CUDA 样例没有配置 `derived_chips`，会按实际目录直接构建。
+CANN 的 `9.1.1-910b-ubuntu22.04` 和 `9.0.0-910b-ubuntu22.04` 是模板目录，其它芯片版本由 `derived_chips` 自动展开，构建时仅替换 Dockerfile 顶层 `BASE_IMAGE`。9.1.1 默认使用 `torch-2.11`，并提供 CANN 9.1.X 对应的 TorchNPU 26.1.1 兼容环境。CUDA 样例没有配置 `derived_chips`，会按实际目录直接构建。
 
 CANN、ModelArts CUDA 和 self-host CUDA 镜像会在运行时启用对应环境的 pip constraint，保护 PyTorch、TorchVision、TorchAudio 和 NumPy 的版本；切换 CANN conda 环境时会自动切换到该环境自己的约束文件。
 
