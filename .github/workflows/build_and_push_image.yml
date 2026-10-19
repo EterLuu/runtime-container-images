@@ -274,7 +274,7 @@ jobs:
           tags: ${{ steps.repositories.outputs.non_swr_repositories }}
           file: ${{ github.workspace }}/${{ matrix.path }}/Dockerfile
           context: ${{ github.workspace }}/${{ matrix.path }}
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=false
           provenance: false
 
       - name: Export digest from non-SWR push
@@ -302,7 +302,7 @@ jobs:
               --build-arg "BASE_IMAGE=${{ matrix.base_image }}" \
               --tag "${repository}" \
               --file "${{ github.workspace }}/${{ matrix.path }}/Dockerfile" \
-              --output "type=image,push-by-digest=true,name-canonical=true,push=true" \
+              --output "type=image,push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=false" \
               --provenance=false \
               --metadata-file "${metadata_file}" \
               "${{ github.workspace }}/${{ matrix.path }}"
@@ -450,5 +450,5 @@ jobs:
             for digest in *; do
               digest_refs+=("${repository}@sha256:${digest}")
             done
-            docker buildx imagetools create -t "${tag}" "${digest_refs[@]}"
+            docker buildx imagetools create --prefer-index=false -t "${tag}" "${digest_refs[@]}"
           done
